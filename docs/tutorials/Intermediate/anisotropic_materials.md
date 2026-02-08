@@ -1,37 +1,17 @@
 
-# NeoHookean
+# General Hyperelasticity
 
-## NeoHookean Equation
+## Anisotropic Hyperelastic Materials
 
-After looking at a simple [linear problem](poisson.md), we move towards a nonlinear problem. This is where the power of the GPU based computations really shine. We are solving a conservation of linear momentum equation
-
-$$
-\rho_0 \ddot{\varphi} = \nabla \cdot \mathbf{P} + \rho_0 \mathbf{b}
-$$
-
-To unpack the notation, $\varphi$ represents the motion of the body. Dynamics will be gone over in [dynamics](../Advanced/dynamic_problems.md), so we will assume quasi-static. Thus, $\varphi$ is independent of time for further simplification, assume no body force $\mathbf{b} = 0$ to get
+After going through the simpler Neo-Hookean example, we can look at fully anisotropic models based on fiber directions. For anisotropic material models, we add in a fiber field to direct the anisotropic modes of the strain energy. We can then have a transversly isotropic material defined by
 
 $$
-0 = \nabla \cdot \mathbf{P}
+\Psi(\mathbf{F}) = c (I_1 - 3) + \frac{a}{2b} \left( e^{b(I_4 - 1)^2} - 1\right) + \frac{K}{2} \left( \frac{J^2 - 1}{2} - \ln(J) \right)
 $$
 
-We can obtain a displacement field $\mathbf{u} = \varphi(\mathbf{X}) - \mathbf{X}$ with $\mathbf{X}$ as the reference coordinate, where $\mathbf{u}$ will be the variable of interest. Then we have the deformation gradient $\mathbf{F}(\mathbf{X}) = \nabla \mathbf{\varphi} = \nabla \mathbf{u} + \mathbf{I}$. To obtain the First Piola Kirchhoff stress tensor, we need to define the strain energy which is where this becomes hyperelasticity. We define the strain energy as
-
-$$
-\Psi(\mathbf{F}) = C(\mathbf{F}^T \mathbf{F} - 3 - 2\ln(J)) + D (J - 1)^2
-$$
-
-where $J = \det(\mathbf{F})$. Now differentiating with respect to $\mathbf{F}$ will give us
-
-$$
-\mathbf{P} = \frac{\partial \Psi}{\partial \mathbf{F}}
-$$
-
-The major convience is that this derivative can be computed via `jax.grad`, so little derivation is required.
+with a bulk stiffness $c$, two parameters for the anisotropic component $a$ and $b$, and a incompressibility parameter $K$.
 
 ## Implementation
-
-Now we will go over how to solve this nonlinear problem.
 
 ### Imports
 
