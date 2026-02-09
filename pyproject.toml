@@ -1,41 +1,48 @@
 [build-system] # Require setuptool version due to https://github.com/pypa/setuptools/issues/2938
 requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
- # See https://python-poetry.org/docs/pyproject/ for more keywords for the project table
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# See https://python-poetry.org/docs/pyproject/ for more keywords for the project table
 [project]
 name = "cardiax"
+version = "0.1.0"
+description = "Cardiax: A Python package for GPU enabled cardiac simulations"
+readme = "README.md"
+requires-python = ">=3.9, <3.14" # Needed for TACC, default 3.9.7
+license = { text = "GPL-3.0-only" }
+
 authors = [
     {name = "Benjamin Thomas", email = "bjt2369@utexas.edu"},
     {name = "Kenneth Meyer", email = "kmeyer2@utexas.edu"},
     {name = "Gabriel Peery", email = "gabriel.peery@utexas.edu"},
     {name = "Ulas Akyuz", email = "ua2375@my.utexas.edu"}
     ]
-version = "0.1.0"
-description = "Cardiax: A Python package for GPU enabled cardiac simulations"
-
-# "readme" the description field in your package, see: https://python-poetry.org/docs/pyproject/#readme
-readme = "README.md"
-
-requires-python = ">=3.9, <=3.13" # Needed for TACC, default 3.9.7
-
-# Path to license file, see: https://spdx.org/licenses/ for options
-license = "GPL-3.0-only"
 
 # Direct dependencies
 dependencies = [
-    'jax', # JAX is used for automatic differentiation and GPU acceleration
-    'numpy', # Numpy is used for numerical operations
-    'meshio', # Meshio is used for reading and writing mesh files
-    'lineax', # Lineax is used for matrix operators on GPUs
-    'jaxtyping', # Jaxtyping is used for type annotations in JAX
-    'fenics-basix', # Basix is used for finite element basis functions
-    'pyyaml', # PyYAML is used for reading configuration files
-    'pygmsh', # pygmsh is used for mesh generation
-    'pyvista', # PyVista is used for 3D visualization
-    'vtk < 9.4' # VTK is used for 3D visualization
+    'jax>=0.4', # JAX is used for automatic differentiation and GPU acceleration
+    'numpy>=2.0', # Numpy is used for numerical operations
+    'meshio>=5.0', # Meshio is used for reading and writing mesh files
+    'lineax>=0.1.0', # Lineax is used for matrix operators on GPUs
+    'jaxtyping>=0.3', # Jaxtyping is used for type annotations in JAX
+    'fenics-basix>=0.9', # Basix is used for finite element basis functions
+    'pyyaml>=6.0', # PyYAML is used for reading configuration files
+    'pygmsh>=7.0', # pygmsh is used for mesh generation
+    'pyvista>=0.43', # PyVista is used for 3D visualization
+    'vtk < 9.6' # VTK is used for 3D visualization
 ]
 
 [project.optional-dependencies]
+# For GPU, calls jax GPU install
+cuda13 = ["jax[cuda13]>=0.4"]
+cuda13-local = ["jax[cuda13-local]>=0.4"]
+
 test = [
    "ruff", # Formatting: https://docs.astral.sh/ruff/rules/#pydocstyle-d
    "pytest", # Testing suite
@@ -52,11 +59,11 @@ docs = [
     "mkdocstrings-python==2.0.1"    
 ]
 
-pypi = [
-    "build" # Used for building wheels and uploading to pypi
-]
+# Used for building wheels and uploading to pypi
+build = ["build"]
 
-all = ["cardiax[test,docs,pypi]"]
+all = ["cardiax[test,docs,build,cuda13]"]
+
 [tool.mypy]
 ignore_missing_imports = true # Does not show errors when importing untyped libraries
 exclude = [ # We only want mypy to consider files that are not generated in installing or building documentation
