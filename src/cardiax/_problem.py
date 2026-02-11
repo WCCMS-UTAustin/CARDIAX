@@ -533,6 +533,9 @@ class Problem(metaclass=MethodWrappingMeta):
                         face_shape = self.physical_surface_quad_points[fe_key][surf_fn].shape
                         assert isinstance(var, jax.Array), \
                         f"Var {var_key} for surface function {surf_fn} in finite element field {fe_key} is not a jax array."
+
+                        # need to check if these can be blank... this seems to overwrite existing data with
+                        # an empty dictionary, so I'm not sure what it's purpose is.
                         if len(var) == 0:
                             int_var_surf_fe_fn[var_key] = {}
                         else:
@@ -553,6 +556,10 @@ class Problem(metaclass=MethodWrappingMeta):
                             elif var.shape[0] == self.mesh[fe_key].points.shape[0]:
                                 print("Nodal face data for internal vars on surfaces not implemented yet.")
                                 exit()
+
+                            # NOTE: this only holds for an array of length 1.
+                            #       if a traction *vector* is to be held constant, this elif
+                            #       is FALSE, which is not desired.
                             # Constant face data
                             elif sum(var.shape) == 1:
                                 var_reshaped = np.repeat(np.repeat(var[None, :], repeats=face_shape[1], axis=0)[None, :, :], repeats=face_shape[0], axis=0)
