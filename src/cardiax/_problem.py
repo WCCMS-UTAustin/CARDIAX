@@ -559,7 +559,7 @@ class Problem(metaclass=MethodWrappingMeta):
                             else:
                                 raise ValueError(f"Internal variable {var_key} for finite element "
                                                 f"field {fe_key} has incompatible shape {var.shape}."
-                                                f"Expected shape for nodal data ({self.mesh[fe_key].points.shape[0]}, {var} dim)")
+                                                f"Expected shape for nodal data ({self.mesh[fe_key].points.shape[0]}, '{var_key}' dim)")
                             int_var_surf_fe_fn[var_key] = var_reshaped
                 except Exception as e:
                     raise ValueError(f"Error processing self.internal_vars_surfaces for finite element field {fe_key}: {e}")
