@@ -13,8 +13,8 @@ class HyperElasticity(Problem):
     def get_tensor_map(self):
 
         def psi(F, f):
-            c, a, b = 3., 2., 0.5
-            K = 30.
+            c, a, b = 3., 2., 1.
+            K = 300.
             J = np.linalg.det(F)
             I1 = np.trace(F.T @ F)
             I4 = f.T @ F @ f
@@ -36,7 +36,7 @@ class HyperElasticity(Problem):
     def get_surface_maps(self):
 
         def surface_map(u, u_grad, x, t):
-            return np.array([0., 0., t[0]])
+            return np.array([0., 0., -t[0]])
                 
         return {"u": {"top": surface_map}}
 
@@ -64,69 +64,81 @@ problem = HyperElasticity({"u": fe},
                           dirichlet_bc_info=dirichlet_bc_info,
                           location_fns=location_fns)
 
-fibers = np.full((mesh.points.shape[0], 3), np.array([0., 0., 1.]))
-problem.set_internal_vars({"u": {"f": fibers}})
+fibers1 = np.full((mesh.points.shape[0], 3), np.array([0., 0., 1.]))
+fibers1 = fe.convert_dof_to_quad(fibers1)
+fibers2 = np.full((mesh.points.shape[0], 3), np.array([0., np.sin(np.pi/6), np.cos(np.pi/6)]))
+fibers2 = fe.convert_dof_to_quad(fibers2)
 
 solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
 
-forces = np.linspace(0, 1., 21, endpoint=True)
+forces = np.linspace(0, 2., 41, endpoint=True)
+sols1 = []
+sols2 = []
 
-sols = []
-fibers_list = []
+problem.set_internal_vars({"u": {"f": fibers1}})
 for i, f in enumerate(forces):
     problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([f])}}})
     sol, info = solver.solve(max_iter=50)
     assert info[0]
     solver.initial_guess = sol
-    sols.append(sol)
+    sols1.append(sol)
 
-    Fs = get_F(fe, sol).mean(axis=1)
-    fibers_cell = fe.convert_dof_to_quad(fibers).mean(axis=1)
-    fibers_new = np.einsum("ijk, ik -> ik", Fs, fibers_cell)    
-    fibers_list.append(fibers_new)
-
-for i in range(60):
-    fiber = np.array([np.sin(i/30 * np.pi), 0., np.cos(i/30 * np.pi)])
-    fibers_list.append(fiber)
-    fibers_new = np.full((mesh.points.shape[0], 3), fiber)
-    problem.set_internal_vars({"u": {"f": fibers_new}})
+solver.initial_guess = np.zeros((problem.num_total_dofs_all_vars))
+problem.set_internal_vars({"u": {"f": fibers2}})
+for i, f in enumerate(forces):
+    problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([f])}}})
     sol, info = solver.solve(max_iter=50)
     assert info[0]
     solver.initial_guess = sol
-    sols.append(sol)
-    
-    Fs = get_F(fe, sol).mean(axis=1)
-    fibers_cell = fe.convert_dof_to_quad(fibers_new).mean(axis=1)
-    fibers_new = np.einsum("ijk, ik -> ik", Fs, fibers_cell)
-    fibers_list.append(fibers_new)
+    sols2.append(sol)
 
-    mesh.point_data["sol"] = np.array(sol).reshape(-1, fe.dim)
-    mesh.cell_data["fiber"] = np.array(fibers_new).reshape(-1, 3)
-    mesh.save(f"cyl_{i}.vtk")
-
-exit()
 if plotting := True:
     fig_dir = Path("../../figures/Intermediate/anisotropic_materials/")
     os.makedirs(fig_dir, exist_ok=True)
     import pyvista as pv
     import numpy as onp
 
-    pl = pv.Plotter(off_screen=True)
-    mesh.point_data["sol"] = onp.array(sols[0]).reshape(-1, fe.dim)
-    mesh.point_data["fiber"] = onp.array(fibers_list[0]).reshape(-1, 3)
-    warped = mesh.warp_by_vector("sol", factor=1.)
+    pl = pv.Plotter(shape=(1, 2), off_screen=True)
+    mesh.point_data["sol1"] = onp.array(sols1[0]).reshape(-1, fe.dim)
+    mesh.point_data["sol2"] = onp.array(sols2[0]).reshape(-1, fe.dim)
+    mesh.cell_data["fiber1"] = onp.array(fibers1[:, 0, :]).reshape(-1, 3)
+    mesh.cell_data["fiber2"] = onp.array(fibers2[:, 0, :]).reshape(-1, 3)
+    warped1 = mesh.warp_by_vector("sol1", factor=1.)
+    warped2 = mesh.warp_by_vector("sol2", factor=1.)
+    glyph1 = warped1.glyph(orient="fiber1", scale=False, 
+                               tolerance=0.05, factor=0.1)
+    glyph2 = warped2.glyph(orient="fiber2", scale=False, 
+                               tolerance=0.05, factor=0.1)
 
-    pl.add_mesh(warped)
+    pl.subplot(0, 0)
+    pl.add_mesh(warped1, reset_camera=False, opacity=0.5,
+                color="white", show_edges=True)
+    pl.add_mesh(glyph1, color="red", reset_camera=False)
+    pl.subplot(0, 1)
+    pl.add_mesh(warped2, reset_camera=False, opacity=0.5,
+                color="white", show_edges=True)
+    pl.add_mesh(glyph2, color="red", reset_camera=False)
     pl.open_gif(fig_dir / "cyl_movie.gif")
 
-    for i, s in enumerate(sols):
+    for i in range(len(sols1)):
         pl.clear()
-        mesh.point_data["sol"] = onp.array(s).reshape(-1, fe.dim)
-        mesh.point_data["fiber"] = onp.array(fibers_list[i]).reshape(-1, 3)
-        warped = mesh.warp_by_vector("sol", factor=1.)
-        glyph = warped.glyph(orient="fiber", scale=False, factor=0.1)
+        pl.subplot(0, 0)
+        mesh.point_data["sol1"] = onp.array(sols1[i]).reshape(-1, fe.dim)
+        warped1 = mesh.warp_by_vector("sol1", factor=1.)
+        glyph1 = warped1.glyph(orient="fiber1", scale=False, 
+                               tolerance=0.05, factor=0.1)
+        pl.add_mesh(warped1, reset_camera=False, opacity=0.5,
+                    color="white", show_edges=True)
+        pl.add_mesh(glyph1, color="red", reset_camera=False)
         pl.add_title(f"force = {forces[i]:.3f}")
-        pl.add_mesh(warped, reset_camera=False)
-        pl.add_mesh(glyph, color="red", reset_camera=False)
+        pl.subplot(0, 1)
+        mesh.point_data["sol2"] = onp.array(sols2[i]).reshape(-1, fe.dim)
+        warped2 = mesh.warp_by_vector("sol2", factor=1.)
+        glyph2 = warped2.glyph(orient="fiber2", scale=False, 
+                               tolerance=0.05, factor=0.1)
+        pl.add_mesh(warped2, reset_camera=False, opacity=0.5,
+                    color="white", show_edges=True)
+        pl.add_mesh(glyph2, color="red", reset_camera=False)
+        pl.add_title(f"force = {forces[i]:.3f}")
         pl.write_frame()
     pl.close()

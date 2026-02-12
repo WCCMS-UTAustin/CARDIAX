@@ -109,7 +109,7 @@ while loss > tol: # Inverse solve loop
 
     sols.append(sol)
     # Random guess of L for Newton
-    E_val = E_val - loss/grad
+    E_val = E_val - .25 * loss/grad # Works with no scaling, wanted it for gif
     # Clip to speed up solve time without care for regularizing
     E_val = np.clip(E_val, 50, 100)
     E_vals.append(E_val)
