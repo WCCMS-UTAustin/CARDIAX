@@ -31,7 +31,7 @@ set_jax_enable_x64(True)
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 ############## Lagrange Capabilities #################
-from .Lagrange.fe import FiniteElement as FiniteElement
+from .Lagrange.fe import FiniteElement
 
 ############## Important Classes #################
 from ._problem import Problem as Problem

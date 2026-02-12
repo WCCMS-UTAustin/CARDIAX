@@ -1,4 +1,6 @@
 import numpy as onp
+import jax.numpy as np
+import jax
 import meshio
 from meshio import Mesh
 import pyvista as pv
@@ -9,7 +11,7 @@ from jax.typing import ArrayLike
 
 from cardiax._basis import get_elements
 
-def gmsh_to_meshio(msh_file: Optional[str] = None, **kwargs) -> Mesh:
+def gmsh_to_meshio(msh_file: Optional[str] = None, **kwargs) -> pv.UnstructuredGrid:
     """Converts gmsh output to meshio format.
     Currently deletes all mesh data, will change to 
     keep gmsh QoIs.
@@ -18,7 +20,7 @@ def gmsh_to_meshio(msh_file: Optional[str] = None, **kwargs) -> Mesh:
         msh_file (Union[str, None]): The output msh file path.
 
     Returns:
-        Mesh.meshio: The converted mesh object.
+        pv.UnstructuredGrid: Mesh object
     """
 
     mesh = meshio.read("temp.msh")
@@ -48,27 +50,22 @@ def rectangle_mesh(Nx: int = 10, Ny: int = 10,
                    Lx: float = 1.0, Ly: float = 1.0, 
                    ele_type: str = "quad", 
                    msh_file: Optional[str] = None, 
-                   verbose: bool = False) -> Mesh:
-    """Generate a mesh for a rectangle using gmsh.
+                   verbose: bool = False) -> pv.UnstructuredGrid:
+    """Generate a rectangle mesh.
     
     Args:
-        Nx (int): Number of elements in x direction
-        Ny (int): Number of elements in y direction  
-        Lx (float): Length in x direction
-        Ly (float): Length in y direction
-        degree (int): Degree of mesh elements
-        data_dir (str): Directory to save mesh files if desired
-        verbose (bool): Enable/disable gmsh terminal output
+        Nx (int, optional): Number of elements in x direction. Defaults to 10
+        Ny (int, optional): Number of elements in y direction. Defaults to 10
+        Lx (float, optional): Length in x direction. Defaults to 1.
+        Ly (float, optional): Length in y direction. Defaults to 1.
+        ele_type (str, optional): Type of mesh elements. Defaults to quad
+        msh_file (str, optional): Path to save the generated mesh file. Defaults to None
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False
         
     Returns:
-        meshio.Mesh: Mesh object
+        pyvista.UnstructuredGrid: Mesh object
     """
     
-    offset_x = 0.
-    offset_y = 0.
-    domain_x = Lx
-    domain_y = Ly
-
     _, _, _, _, degree, _ = get_elements(ele_type)
     gmsh.initialize()
     if not verbose:
@@ -81,10 +78,10 @@ def rectangle_mesh(Nx: int = 10, Ny: int = 10,
         gmsh.option.setNumber("Mesh.SecondOrderIncomplete", 1)
 
     # Create rectangle geometry
-    p1 = gmsh.model.geo.addPoint(offset_x, offset_y, 0)
-    p2 = gmsh.model.geo.addPoint(offset_x + domain_x, offset_y, 0)
-    p3 = gmsh.model.geo.addPoint(offset_x + domain_x, offset_y + domain_y, 0)
-    p4 = gmsh.model.geo.addPoint(offset_x, offset_y + domain_y, 0)
+    p1 = gmsh.model.geo.addPoint(0, 0, 0)
+    p2 = gmsh.model.geo.addPoint(Lx, 0, 0)
+    p3 = gmsh.model.geo.addPoint(Lx, Ly, 0)
+    p4 = gmsh.model.geo.addPoint(0, Ly, 0)
     
     l1 = gmsh.model.geo.addLine(p1, p2)
     l2 = gmsh.model.geo.addLine(p2, p3)
@@ -110,8 +107,21 @@ def rectangle_mesh(Nx: int = 10, Ny: int = 10,
     gmsh.model.mesh.setOrder(degree)
     
     gmsh.write("temp.msh")
+    gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    top_pts = onp.isclose(mesh.points[:, 1], Ly)
+    bottom_pts = onp.isclose(mesh.points[:, 1], 0.)
+    left_pts = onp.isclose(mesh.points[:, 0], 0.)
+    right_pts = onp.isclose(mesh.points[:, 0], Lx)
+
+    point_data = {"top": top_pts.astype(float),
+                  "bottom": bottom_pts.astype(float),
+                  "left": left_pts.astype(float),
+                  "right": right_pts.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     mesh.points = mesh.points[:, :2]  # Drop z-coordinate for 2D mesh
     return mesh
 
@@ -119,11 +129,23 @@ def box_mesh(Nx: int = 10, Ny: int = 10, Nz: int = 10,
              Lx: float = 1.0, Ly: float = 1.0, Lz: float = 1.0, 
              ele_type: str = 'hexahedron', 
              msh_file: Optional[str] = None, 
-             verbose: bool = False) -> Mesh:
-    """
-    Generate a structured box mesh using gmsh.geo API.
-    """
+             verbose: bool = False) -> pv.UnstructuredGrid:
+    """Generate a box mesh.
 
+    Args:
+        Nx (int, optional): Number of elements in x direction. Defaults to 10.
+        Ny (int, optional): Number of elements in y direction. Defaults to 10.
+        Nz (int, optional): Number of elements in z direction. Defaults to 10.
+        Lx (float, optional): Length in x direction. Defaults to 1.0.
+        Ly (float, optional): Length in y direction. Defaults to 1.0.
+        Lz (float, optional): Length in z direction. Defaults to 1.0.
+        ele_type (str, optional): Type of mesh elements. Defaults to 'hexahedron'.
+        msh_file (str, optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+
+    Returns:
+        pyvista.UnstructuredGrid: Mesh object
+    """
     _, _, _, _, degree, _ = get_elements(ele_type)
     
     gmsh.initialize()
@@ -170,14 +192,43 @@ def box_mesh(Nx: int = 10, Ny: int = 10, Nz: int = 10,
     gmsh.write("temp.msh")
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    top_pts = mesh.points[:, 2] == Lz
+    bottom_pts = mesh.points[:, 2] == 0.
+    left_pts = mesh.points[:, 0] == 0.
+    right_pts = mesh.points[:, 0] == Lx
+    front_pts = mesh.points[:, 1] == 0.
+    back_pts = mesh.points[:, 1] == Ly
+
+    point_data = {"top": top_pts.astype(float),
+                  "bottom": bottom_pts.astype(float),
+                  "left": left_pts.astype(float),
+                  "right": right_pts.astype(float),
+                  "front": front_pts.astype(float),
+                  "back": back_pts.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
 def sphere_mesh(center: onp.ndarray = onp.array([0., 0., 0.]), 
                 radius: float = 1.0, 
                 degree: int = 1, 
                 msh_file: Optional[str] = None, 
-                verbose: bool = False) -> Mesh:
+                verbose: bool = False) -> pv.UnstructuredGrid:
+
+    """Generate a sphere mesh.
+
+    Args:
+        center (onp.ndarray, optional): Center coordinates of the sphere. Defaults to onp.array([0., 0., 0.]).
+        radius (float, optional): Radius of the sphere. Defaults to 1.0.
+        degree (int, optional): Mesh element order. Defaults to 1.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+
+    Returns:
+        pv.UnstructuredGrid: Mesh object
+    """
 
     # Initialize gmsh
     gmsh.initialize()
@@ -207,11 +258,15 @@ def sphere_mesh(center: onp.ndarray = onp.array([0., 0., 0.]),
 
     # Write mesh to file
     gmsh.write("temp.msh")
-
-    # Finalize gmsh
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    outer_surface = onp.isclose(onp.linalg.norm(mesh.points - center, axis=1), radius)
+
+    point_data = {"outer_surface": outer_surface.astype(float)}
+    
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
 def hollow_sphere_mesh(center: onp.ndarray = onp.array([0., 0., 0.]), 
@@ -219,19 +274,20 @@ def hollow_sphere_mesh(center: onp.ndarray = onp.array([0., 0., 0.]),
                        inner_radius: float = 0.5, 
                        degree: int = 1, 
                        msh_file: Optional[str] = None, 
-                       verbose: bool = False) -> Mesh:
+                       verbose: bool = False) -> pv.UnstructuredGrid:
     """
     Create a hollow sphere by subtracting an inner sphere from an outer sphere.
     
     Args:
-        center: tuple of (x, y, z) coordinates for sphere center
-        outer_radius: radius of the outer sphere
-        inner_radius: radius of the inner sphere (must be < outer_radius)
-        degree: mesh element order
-        verbose: Enable/disable gmsh terminal output
+        center (onp.ndarray, optional): Center coordinates of the sphere. Defaults to onp.array([0., 0., 0.]).
+        outer_radius (float, optional): Radius of the outer sphere. Defaults to 1.0.
+        inner_radius (float, optional): Radius of the inner sphere. Defaults to 0.5.
+        degree (int, optional): Mesh element order. Defaults to 1.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
     
     Returns:
-        mesh: meshio mesh object
+        pyvista.UnstructuredGrid: Mesh object
     """
     
     # Initialize gmsh
@@ -271,26 +327,38 @@ def hollow_sphere_mesh(center: onp.ndarray = onp.array([0., 0., 0.]),
 
     # Write mesh to file
     gmsh.write("temp.msh")
-
-    # Finalize gmsh
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    outer_surface = onp.isclose(onp.linalg.norm(mesh.points - center, axis=1), outer_radius)
+    inner_surface = onp.isclose(onp.linalg.norm(mesh.points - center, axis=1), inner_radius)
+
+    point_data = {"outer_surface": outer_surface.astype(float),
+                  "inner_surface": inner_surface.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
 def ellipsoid_mesh(a: float = 1.0, b: float = 0.8, c: float = 0.6, 
                    mesh_size: float = 0.1, 
                    msh_file: Optional[str] = None, 
-                   verbose: bool = False) -> Mesh:
+                   verbose: bool = False) -> pv.UnstructuredGrid:
     """
-    Create an ellipsoid mesh using gmsh
+    Create an ellipsoid mesh.
     
-    Parameters:
-    a, b, c: semi-axes lengths (default creates a cardiac-like shape)
-    mesh_size: characteristic mesh size
-    output_file: output mesh file name
-    verbose: Enable/disable gmsh terminal output
+    Args:
+        a (float, optional): Semi-axis length in x direction. Defaults to 1.0.
+        b (float, optional): Semi-axis length in y direction. Defaults to 0.8.
+        c (float, optional): Semi-axis length in z direction. Defaults to 0.6.
+        mesh_size (float, optional): Characteristic length for mesh generation. Defaults to 0.1.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+    
+    Returns:
+        pyvista.UnstructuredGrid: Mesh object
     """
+
     # Initialize gmsh
     gmsh.initialize()
     if not verbose:
@@ -315,14 +383,20 @@ def ellipsoid_mesh(a: float = 1.0, b: float = 0.8, c: float = 0.6,
     
     # Write mesh file
     gmsh.write("temp.msh")
-    
-    # Optional: launch GUI to visualize (comment out for batch processing)
-    # gmsh.fltk.run()
-    
-    # Finalize gmsh
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    @jax.vmap
+    def outer_ellipse(point):
+        x, y, z = point
+        return np.isclose((x/a)**2 + (y/b)**2 + (z/c)**2, 1.0)
+
+    outer_surface = outer_ellipse(mesh.points)
+
+    point_data = {"outer_surface": outer_surface.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
 def hollow_ellipsoid_mesh(center: onp.ndarray = onp.array([0., 0., 0.]), 
@@ -332,19 +406,22 @@ def hollow_ellipsoid_mesh(center: onp.ndarray = onp.array([0., 0., 0.]),
                           cl_min: float = 0.05, 
                           cl_max: float = 0.1,
                           msh_file: Optional[str] = None,
-                          verbose=False) -> Mesh:
+                          verbose=False) -> pv.UnstructuredGrid:
     """
     Create a hollow ellipsoid by subtracting an inner ellipsoid from an outer ellipsoid.
 
     Args:
-        center: tuple or array of (x, y, z) coordinates for ellipsoid center
-        outer_axes: tuple of (a, b, c) semi-axes for outer ellipsoid
-        inner_axes: tuple of (a, b, c) semi-axes for inner ellipsoid (must be < outer_axes)
-        degree: mesh element order
-        verbose: Enable/disable gmsh terminal output
+        center (onp.ndarray, optional): Center coordinates of the ellipsoid. Defaults to onp.array([0., 0., 0.]).
+        outer_axes (ArrayLike, optional): Tuple of (a, b, c) semi-axes for outer ellipsoid. Defaults to (1.0, 0.8, 0.6).
+        inner_axes (ArrayLike, optional): Tuple of (a, b, c) semi-axes for inner ellipsoid (must be < outer_axes). Defaults to (0.5, 0.4, 0.3).
+        degree (int, optional): Mesh element order. Defaults to 1.
+        cl_min (float, optional): Minimum characteristic length for mesh generation. Defaults to 0.05.
+        cl_max (float, optional): Maximum characteristic length for mesh generation. Defaults to 0.1.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
 
     Returns:
-        mesh: meshio mesh object
+        pyvista.UnstructuredGrid: Mesh object
     """
 
     gmsh.initialize()
@@ -375,16 +452,47 @@ def hollow_ellipsoid_mesh(center: onp.ndarray = onp.array([0., 0., 0.]),
     gmsh.write("temp.msh")
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+    A, B, C = outer_axes
+    a, b, c = inner_axes
+
+    def ellipse(point, a, b, c):
+        x, y, z = point
+        return np.isclose((x/a)**2 + (y/b)**2 + (z/c)**2, 1.0)
+
+    outer_surface = jax.vmap(ellipse, in_axes=(0, None, None, None))(mesh.points, A, B, C)
+    inner_surface = jax.vmap(ellipse, in_axes=(0, None, None, None))(mesh.points, a, b, c)
+
+    point_data = {"outer_surface": outer_surface.astype(float),
+                  "inner_surface": inner_surface.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
-def cylinder_mesh(height=1.0, 
-                  radius=0.25, 
-                  element_degree=1,
-                  cl_min=0.1, 
-                  cl_max=0.2, 
-                  msh_file=None, 
-                  verbose=False):
+def cylinder_mesh(height: float = 1.0, 
+                  radius: float = 0.25, 
+                  element_degree: int = 1,
+                  cl_min: float = 0.025, 
+                  cl_max: float = 0.05, 
+                  msh_file: Optional[str] = None, 
+                  verbose: bool = False) -> pv.UnstructuredGrid:
+    
+    """
+    Creates a cylinder mesh.
+    
+    Args:
+        height (float, optional): Height of the cylinder. Defaults to 1.0.
+        radius (float, optional): Radius of the cylinder. Defaults to 0.25.
+        element_degree (int, optional): Mesh element order. Defaults to 1.
+        cl_min (float, optional): Minimum characteristic length for mesh generation. Defaults to 0.025.
+        cl_max (float, optional): Maximum characteristic length for mesh generation. Defaults to 0.05.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+    
+    Returns:
+        pyvista.UnstructuredGrid: Mesh object
+    """
+
     gmsh.initialize()
     if not verbose:
         gmsh.option.setNumber("General.Terminal", 0)
@@ -405,7 +513,17 @@ def cylinder_mesh(height=1.0,
     gmsh.write("temp.msh")
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    bottom = mesh.points[:, 2] == 0.
+    top = mesh.points[:, 2] == height
+    outer_surface = onp.isclose(np.linalg.norm(mesh.points[:, :2], axis=1), radius)
+
+    point_data = {"top": top.astype(float),
+                  "bottom": bottom.astype(float),
+                  "outer_surface": outer_surface.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
 def hollow_cylinder_mesh(height: float = 1.0, 
@@ -415,7 +533,25 @@ def hollow_cylinder_mesh(height: float = 1.0,
                          cl_min: float = 0.1, 
                          cl_max: float = 0.2, 
                          msh_file: Optional[str] = None, 
-                         verbose: bool = False):
+                         verbose: bool = False) -> pv.UnstructuredGrid:
+    
+    """
+    Creates a hollow cylinder mesh by subtracting an inner cylinder from the outer.
+    
+    Args:
+        height (float, optional): Height of the cylinder. Defaults to 1.0.
+        outer_radius (float, optional): Radius of the outer cylinder. Defaults to 0.25.
+        inner_radius (float, optional): Radius of the inner cylinder. Defaults to 0.1.
+        element_degree (int, optional): Mesh element order. Defaults to 1.
+        cl_min (float, optional): Minimum characteristic length for mesh generation. Defaults to 0.025.
+        cl_max (float, optional): Maximum characteristic length for mesh generation. Defaults to 0.05.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+    
+    Returns:
+        pyvista.UnstructuredGrid: Mesh object
+    """
+
     gmsh.initialize()
     if not verbose:
         gmsh.option.setNumber("General.Terminal", 0)
@@ -436,17 +572,47 @@ def hollow_cylinder_mesh(height: float = 1.0,
     gmsh.write("temp.msh")
     gmsh.finalize()
 
-    mesh = gmsh_to_meshio(msh_file)
+    mesh = meshio.read("temp.msh")
+
+    bottom = mesh.points[:, 2] == 0.
+    top = mesh.points[:, 2] == height
+    outer_surface = onp.isclose(np.linalg.norm(mesh.points[:, :2], axis=1), outer_radius)
+    inner_surface = onp.isclose(np.linalg.norm(mesh.points[:, :2], axis=1), inner_radius)
+
+    point_data = {"top": top.astype(float),
+                  "bottom": bottom.astype(float),
+                  "outer_surface": outer_surface.astype(float),
+                  "inner_surface": inner_surface.astype(float)}
+
+    mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
-def prolate_spheroid_mesh(msh_file: Optional[str] = None, 
+def prolate_spheroid_mesh(sigma_min: float = 1.35, sigma_max: float = 1.8, 
+                          tau_min: float = -1., tau_max: float = 0.,
+                          msh_file: Optional[str] = None, 
                           verbose: bool = False,
                           cl_min: float = 0.25,
-                          cl_max: float = 0.5) -> Mesh:
+                          cl_max: float = 0.5) -> pv.UnstructuredGrid:
 
-    sigma_min, sigma_max = 1.35, 1.8
-    tau_min, tau_max = -1., 0.
-    phi_min = 0.
+    """
+    Creates a prolate spheroid mesh through prolate spheroidal coordinate system (sigma, tau, phi).
+    Sigma must be >= 1
+    Tau must be in [-1, 1]
+    
+    Args:
+        sigma_min (float, optional): Minimum value for sigma coordinate. Defaults to 1.35.
+        sigma_max (float, optional): Maximum value for sigma coordinate. Defaults to 1.8.
+        tau_min (float, optional): Minimum value for tau coordinate. Defaults to -1.
+        tau_max (float, optional): Maximum value for tau coordinate. Defaults to 0.
+        msh_file (Optional[str], optional): Path to save the generated mesh file. Defaults to None.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+        cl_min (float, optional): Minimum characteristic length for mesh generation. Defaults to 0.25.
+        cl_max (float, optional): Maximum characteristic length for mesh generation. Defaults to 0.5.
+        verbose (bool, optional): Enable/disable gmsh terminal output. Defaults to False.
+    
+    Returns:
+        pyvista.UnstructuredGrid: Mesh object
+    """
 
     def compute_foci(tau):
         return onp.sqrt(3 * (1 + 5. * tau**2))
@@ -467,16 +633,16 @@ def prolate_spheroid_mesh(msh_file: Optional[str] = None,
     gmsh.option.setNumber("Geometry.CopyMeshingMethod", 1)
     gmsh.model.add("prolate_spheroid")
 
-    apex_endo_pt = PS_coords(onp.array([sigma_min, tau_min, phi_min]))
-    apex_epi_pt = PS_coords(onp.array([sigma_max, tau_min, phi_min]))
+    apex_endo_pt = PS_coords(onp.array([sigma_min, tau_min, 0.]))
+    apex_epi_pt = PS_coords(onp.array([sigma_max, tau_min, 0.]))
     apex_endo = gmsh.model.geo.addPoint(*apex_endo_pt)
     apex_epi = gmsh.model.geo.addPoint(*apex_epi_pt)
     center = gmsh.model.geo.addPoint(*center_pt)
     apex = gmsh.model.geo.addLine(apex_endo, apex_epi)
 
     for i in range(2):
-        base_endo_pt = PS_coords(onp.array([sigma_min, tau_max, phi_min + i * onp.pi]))
-        base_epi_pt = PS_coords(onp.array([sigma_max, tau_max, phi_min + i * onp.pi]))
+        base_endo_pt = PS_coords(onp.array([sigma_min, tau_max, i * onp.pi]))
+        base_epi_pt = PS_coords(onp.array([sigma_max, tau_max, i * onp.pi]))
 
         base_endo = gmsh.model.geo.addPoint(*base_endo_pt)
         base_epi = gmsh.model.geo.addPoint(*base_epi_pt)
@@ -541,3 +707,43 @@ def prolate_spheroid_mesh(msh_file: Optional[str] = None,
 
     mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
+
+### Plotting meshes for docs ###
+import pyvista as pv
+import matplotlib.colors as mcolors
+import sys
+
+fns = [
+    "rectangle_mesh",
+    "box_mesh",
+    "sphere_mesh",
+    "hollow_sphere_mesh",
+    "ellipsoid_mesh",
+    "hollow_ellipsoid_mesh",
+    "cylinder_mesh",
+    "hollow_cylinder_mesh",
+    "prolate_spheroid_mesh"
+]
+for fn in fns:
+    mesh = getattr(sys.modules[__name__], fn)()
+
+    colors = ['red', "blue", "green", "magenta", "olive", "orange"]
+    pl = pv.Plotter(off_screen=True)
+    pl.add_mesh(mesh, show_edges=True, color="grey", opacity=0.25)
+
+    legend_entries = []
+    for i, p in enumerate(mesh.point_data):
+        start_color = 'white'
+        end_color = colors[i]
+        custom_cmap = mcolors.LinearSegmentedColormap.from_list(
+            'temp',
+            [start_color, end_color]
+        )
+        pl.add_mesh(mesh, opacity=p, scalars=mesh.point_data[p],
+                    cmap=custom_cmap, label=p, copy_mesh=True)
+        legend_entries.append([p, colors[i]])
+
+    pl.remove_scalar_bar()
+    pl.add_axes()
+    pl.add_legend(legend_entries, face="^", loc='upper right', bcolor='white')
+    pl.screenshot(f'../../../docs/figures/meshes/{fn}.png')
