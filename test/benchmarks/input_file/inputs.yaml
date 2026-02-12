@@ -1,0 +1,68 @@
+
+### What do we want to control from the input file? ###
+
+# Path to input file, mesh, and potentially other things...
+# directory: "/home/bthomas/Desktop/Research/NNFE/CARDIAX/demos/input_file"
+
+
+directory: "."
+
+### FE object ###
+# Mesh, quadrature, dim
+# Will need to point to a mesh
+# Make a special case if someone says cube?
+fe_info:
+  var: "u"
+  mesh_path: "./box.vtk"
+  fe_params:
+    ele_type: "hexahedron"
+    gauss_order: 1
+    vec: 3
+
+### Boundary Condition INFO ###
+
+# Potential BC types: Dirichlet, Neumann, Pressure, Spring, ...
+# Surface must be tagged, give key value for the surface
+dirichlet_bc_info:
+  u:
+    bc1:
+      type: "Dirichlet"
+      component: [0, 1, 2]
+      value: [0.0, 0.0, 0.0]
+      surface_tag: "bottom"
+      static: True
+
+surface_maps_info:
+  u:
+    bc2:  
+      type: "Neumann"
+      value: [0.0, 0.0, -1.0]
+      surface_tag: "top"
+      static: True
+
+### Problem object ###
+# PDE to solve (mainly Hyperelasticity)
+# Material model to use (allow adjusting constants)
+# Boundary conditions to apply
+# Faces to apply boundary conditions to (tagged mesh)
+
+pde_info:
+  pde_class: "Hyperelasticity"
+  pde_type: "NeoHookean" # Defines the get_tensor_map
+  material_constants:
+    E: 10.
+    nu: 0.3
+  
+### Solver object ###
+
+solver_info:
+  solver_type: "Newton"
+  
+  solver_params:
+    max_iter: 20
+    atol: 1.0e-6
+
+
+plot_info:
+  plot: True
+  filename: "output.png"
