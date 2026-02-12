@@ -84,6 +84,9 @@ class SurfaceKernelTest(unittest.TestCase):
         # save the problem object.
         cls.problem = problem
 
+        # define a traction to re-use everywhere
+        cls.t = np.array([1.0, 0.0, 0.0])
+
         return super().setUpClass()
     
     # define a method to standardize the *structure* of the input
@@ -129,11 +132,8 @@ class SurfaceKernelTest(unittest.TestCase):
         #
         # this ^ might require a Mock test, but would be worth it IMO.
 
-        # traction - constant everywhere on the 'top' patch.
-        t = np.array([1.0, 0.0, 0.0])
-
         # turn the traction into the appropriate dictionary / structure
-        traction_dict = self.get_internal_vars_surf_dict(t)
+        traction_dict = self.get_internal_vars_surf_dict(self.t)
 
         # set the traction
         self.problem.set_internal_vars_surfaces(traction_dict)
@@ -141,16 +141,50 @@ class SurfaceKernelTest(unittest.TestCase):
         # check that the shape of the internal variable is correct.
         assert self.traction_is_correct_shape()
 
+    def test_single_traction_nodes(self):
+        """ tests defining traction as a constant field,
+            on mesh 'nodes'.
+        """
+
+        # turn the traction into the appropriate dictionary / structure
+        traction_dict = self.get_internal_vars_surf_dict(self.t)
+
+        # set the traction
+        self.problem.set_internal_vars_surfaces(traction_dict, 1)
+
+        # check that the shape of the internal variable is correct.
+        assert self.traction_is_correct_shape()
+    
     def test_traction_cells(self):
         """ tests defining traction that is constant on each cell.
         """
 
         # traction - constant on each cell on the 'top' patch.
-        t = np.array([1.0, 0.0, 0.0])
-        t_cells = np.tile(t, len(self.problem.cells_face_dict['u']['top']))
+        t_cells = np.tile(self.t, (len(self.problem.cells_face_dict['u']['top']),1))
 
         # turn the traction into the appropriate dictionary / structure
         traction_dict = self.get_internal_vars_surf_dict(t_cells)
+
+        # set the traction
+        self.problem.set_internal_vars_surfaces(traction_dict)
+
+        # check that the shape of the internal variable is correct.
+        assert self.traction_is_correct_shape()
+    
+    def test_traction_cells_quads(self):
+        """ tests defining traction at quads on each cell facet.
+        """
+
+        # traction defined on each node (value is constant, but shape is not.).
+        t_nodes = np.tile(self.t, (len(self.problem.cells_face_dict['u']['top']), 
+                              self.problem.fes['u'].num_face_quads, 
+                              1))
+        
+        # NOTE: variables should be:
+        #       (num_faces, num_face_quads, a), right?
+
+        # turn the traction into the appropriate dictionary / structure
+        traction_dict = self.get_internal_vars_surf_dict(t_nodes)
 
         # set the traction
         self.problem.set_internal_vars_surfaces(traction_dict)
@@ -163,22 +197,79 @@ class SurfaceKernelTest(unittest.TestCase):
         """
 
         # traction defined on each node (value is constant, but shape is not.).
-        t = np.array([1.0, 0.0, 0.0])
-        t_nodes = np.tile(t, (len(self.problem.cells_face_dict['u']['top']), 
-                              self.problem.fes['u'].num_face_quads, 
+        t_nodes = np.tile(self.t, (len(self.problem.cells_face_dict['u']['top']), 
+                              self.problem.fes['u'].num_nodes, 
                               1))
+        
+        # NOTE: output should be:
+        #       (num_faces, num_face_quads, a), right?
 
         # turn the traction into the appropriate dictionary / structure
         traction_dict = self.get_internal_vars_surf_dict(t_nodes)
 
         # set the traction
-        self.problem.set_internal_vars_surfaces(traction_dict)
+        # 1 -> defines things at NODES.
+        self.problem.set_internal_vars_surfaces(traction_dict, 1)
 
         # check that the shape of the internal variable is correct.
         assert self.traction_is_correct_shape()
     
-    # any other useful tests?
+    def test_traction_all_nodes(self):
+        """ tests defining traction at all nodes in the mesh.
 
+        this is useful for problems in contat mechanics, not sure
+        how useful this is for other problems.
+        """
+
+        # traction defined on each node (value is constant, but shape is not.).
+        # TODO: test this with wrapped geometries.
+        t_nodes = np.tile(self.t, (self.problem.fes['u'].num_total_nodes, 1))
+        
+        # NOTE: output should be:
+        #       (num_faces, num_face_quads, a), right?
+
+        # turn the traction into the appropriate dictionary / structure
+        traction_dict = self.get_internal_vars_surf_dict(t_nodes)
+
+        # set the traction
+        # 1 -> defines things at NODES.
+        self.problem.set_internal_vars_surfaces(traction_dict, 1)
+
+        # check that the shape of the internal variable is correct.
+        assert self.traction_is_correct_shape()
+
+    def test_scalar_val_all_nodes(self):
+        """ tests defining a pressure as a scalar field at all nodes
+        """
+
+        scalar_value = np.ones((self.problem.fes['u'].num_total_nodes,1))
+
+        # turn the traction into the appropriate dictionary / structure
+        scalar_val_dict = self.get_internal_vars_surf_dict(scalar_value)
+
+        # set the traction
+        # 1 -> defines things at NODES.
+        self.problem.set_internal_vars_surfaces(scalar_val_dict, 1)
+
+        scalar_shape = self.problem.internal_vars_surfaces['u']['top']['a'].shape
+
+        # check that the shape of the internal variable is correct.
+        expected_shape = (len(self.problem.cells_face_dict['u']['top']), 
+                          self.problem.fes['u'].num_face_quads,
+                          1)
+
+        # NOTE: I'm not sure if we're going to support defining
+        #       a scalar field at each node of shape (num_total_nodes,); 
+        #       this becomes a bit ambiguous as what if we want to set
+        #       something with one of the following shapes:
+        #
+        #       - (num_total_cells, )
+        #       - (num_nodes_per_cell, )
+        #       - (num_total_quads, )
+        #
+        #       there is a chance that num_total_cells == num_total_quads,
+        #       so this would be impossible to distinguish.
+        onptest.assert_(expected_shape == scalar_shape)
 
 if __name__ == "__main__":
     unittest.main()
