@@ -1,4 +1,5 @@
 .vscode/launch.json
+.vscode/settings.json
 *.pyc
 
 dev_code/
