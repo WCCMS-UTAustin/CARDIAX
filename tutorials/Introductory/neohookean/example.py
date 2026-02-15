@@ -79,7 +79,7 @@ for f in forces:
     sols.append(sol)
 
 if plotting := True:
-    fig_dir = Path("../../figures/Introductory/neohookean/")
+    fig_dir = Path("../../../docs/figures/Introductory/neohookean/")
     import pyvista as pv
     import numpy as onp
 

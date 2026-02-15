@@ -494,7 +494,8 @@ class Problem(metaclass=MethodWrappingMeta):
                         elif (var.shape[0] == self.mesh[fe_key].points.shape[0]) | (var.shape[0] == self.mesh[fe_key].points.shape[0] * self.vec[fe_key]):
                             var_reshaped = self.fes[fe_key].convert_dof_to_quad(var)
                         # Constant data
-                        elif sum(var.shape) == 1:
+                        # Checking that either has dim, vec, or scalar for maximal flexibility
+                        elif self.dim[fe_key] in var.shape or self.vec[fe_key] in var.shape or var.shape == (1,):
                             new_shape = (self.num_cells[fe_key], self.fes[fe_key].num_quads, *var.shape)
                             var_reshaped = np.full(new_shape, var, dtype=var.dtype)
                         else:

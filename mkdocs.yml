@@ -7,9 +7,22 @@ nav:
   - Home: index.md
   
   - Tutorials:
+
       - Introductory:
-        - Poisson: tutorials/Introductory/poisson.md
-        - NeoHookean: tutorials/Introductory/neohookean.md
+
+        - Poisson:
+          - Mathematical Description: tutorials/Introductory/Poisson/poisson_00.md
+          - Isotropic: tutorials/Introductory/Poisson/poisson_01.md
+          - Anisotropic: tutorials/Introductory/Poisson/poisson_02.md
+          - Boundary Integrals: tutorials/Introductory/Poisson/poisson_03.md
+          - Combination: tutorials/Introductory/Poisson/poisson_04.md
+
+        - NeoHookean:
+          - Mathematical Description: tutorials/Introductory/NeoHookean/neo_hookean_00.md
+          - Compressible: tutorials/Introductory/NeoHookean/neo_hookean_01.md
+          - Incompressible: tutorials/Introductory/NeoHookean/neo_hookean_02.md
+          - Live load: tutorials/Introductory/NeoHookean/neo_hookean_03.md
+          - Combination: tutorials/Introductory/NeoHookean/neo_hookean_04.md
 
       - Intermediate:
         - Hyperelasticity: tutorials/Intermediate/hyperelasticity.md
@@ -38,3 +51,10 @@ plugins:
       handlers:
         python:
           paths: ["src"]
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
