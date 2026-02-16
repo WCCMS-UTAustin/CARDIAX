@@ -139,38 +139,36 @@ class SurfaceKernelTest(unittest.TestCase):
         self.problem.set_internal_vars_surfaces(traction_dict)
 
         # check that the shape of the internal variable is correct.
-        assert self.traction_is_correct_shape()
+        onptest.assert_(self.traction_is_correct_shape())
 
-    def test_single_traction_nodes(self):
-        """ tests defining traction as a constant field,
-            on mesh 'nodes'.
-        """
+        # ADDITIONALLY - repeat this but 'at nodes' to check that the evaluation
+        #                is the same.
+        surface_var_old = onp.array(self.problem.internal_vars_surfaces['u']['top']['a'].tolist())
 
-        # turn the traction into the appropriate dictionary / structure
-        traction_dict = self.get_internal_vars_surf_dict(self.t)
+        # update the internal var
+        traction_dict_new = self.get_internal_vars_surf_dict(self.t)
+        self.problem.set_internal_vars_surfaces(traction_dict_new, 1)
 
-        # set the traction
-        self.problem.set_internal_vars_surfaces(traction_dict, 1)
+        # check that old and new variables are the same
+        onptest.assert_allclose(self.problem.internal_vars_surfaces['u']['top']['a'], surface_var_old)
 
-        # check that the shape of the internal variable is correct.
-        assert self.traction_is_correct_shape()
-    
-    def test_traction_cells(self):
-        """ tests defining traction that is constant on each cell.
-        """
 
-        # traction - constant on each cell on the 'top' patch.
-        t_cells = np.tile(self.t, (len(self.problem.cells_face_dict['u']['top']),1))
+    # CHECK if this produces a different result from the code above.
+    # def test_single_traction_nodes(self):
+    #     """ tests defining traction as a constant field,
+    #         on mesh 'nodes'.
+    #     """
 
-        # turn the traction into the appropriate dictionary / structure
-        traction_dict = self.get_internal_vars_surf_dict(t_cells)
+    #     # turn the traction into the appropriate dictionary / structure
+    #     traction_dict = self.get_internal_vars_surf_dict(self.t)
 
-        # set the traction
-        self.problem.set_internal_vars_surfaces(traction_dict)
+    #     # set the traction
+    #     self.problem.set_internal_vars_surfaces(traction_dict, 1)
 
-        # check that the shape of the internal variable is correct.
-        assert self.traction_is_correct_shape()
-    
+    #     # check that the shape of the internal variable is correct.
+    #     assert self.traction_is_correct_shape()
+
+    # KEEP
     def test_traction_cells_quads(self):
         """ tests defining traction at quads on each cell facet.
         """
@@ -192,28 +190,58 @@ class SurfaceKernelTest(unittest.TestCase):
         # check that the shape of the internal variable is correct.
         assert self.traction_is_correct_shape()
     
-    def test_traction_cells_nodes(self):
-        """ tests defining traction at nodes on each cell facet.
+    # DELETE THIS - should we throw error? or just allow a shape
+    #               error to occur? Could fail silently if shapes 
+    #               are somehow the same...
+    # I think we have to provide documentation that tells users how to
+    # use the code; can maybe throw exceptions if the parameters aren't
+    # of the correct shape.
+    # def test_traction_cells_nodes(self):
+    #     """ tests defining traction at nodes on each cell facet.
+    #     """
+
+    #     # traction defined on each node (value is constant, but shape is not.).
+    #     t_nodes = np.tile(self.t, (len(self.problem.cells_face_dict['u']['top']), 
+    #                           self.problem.fes['u'].num_nodes, 
+    #                           1))
+        
+    #     # NOTE: output should be:
+    #     #       (num_faces, num_face_quads, a), right?
+
+    #     # turn the traction into the appropriate dictionary / structure
+    #     traction_dict = self.get_internal_vars_surf_dict(t_nodes)
+
+    #     # set the traction
+    #     # 1 -> defines things at NODES.
+    #     self.problem.set_internal_vars_surfaces(traction_dict, 1)
+
+    #     # check that the shape of the internal variable is correct.
+    #     assert self.traction_is_correct_shape()
+    
+    @unittest.skip("not implemented yet")
+    def test_variable_boundary_nodes(self):
+        """ tests defining a vector-valued field on only the boundary nodes of the mesh
+
         """
 
-        # traction defined on each node (value is constant, but shape is not.).
-        t_nodes = np.tile(self.t, (len(self.problem.cells_face_dict['u']['top']), 
-                              self.problem.fes['u'].num_nodes, 
-                              1))
-        
-        # NOTE: output should be:
-        #       (num_faces, num_face_quads, a), right?
+    @unittest.skip("not implemented yet")
+    def test_scalar_variable_boundary_nodes(self):
+        """ tests defining a scalar field on only the boundary nodes of the mesh
 
-        # turn the traction into the appropriate dictionary / structure
-        traction_dict = self.get_internal_vars_surf_dict(t_nodes)
+        """
 
-        # set the traction
-        # 1 -> defines things at NODES.
-        self.problem.set_internal_vars_surfaces(traction_dict, 1)
+    @unittest.skip("not implemented yet")
+    @unittest.expectedFailure
+    def test_boundary_nodes_undef_bndry(self):
+        """ tests setting surface variable with boundary nodes on a boundary
+        that isn't properly saved in the Problem class instance.
+        """
 
-        # check that the shape of the internal variable is correct.
-        assert self.traction_is_correct_shape()
-    
+        # NOTE: add an additional surface_map
+        #       in the problem class in this file.
+
+
+    # keep this!
     def test_traction_all_nodes(self):
         """ tests defining traction at all nodes in the mesh.
 
@@ -238,6 +266,7 @@ class SurfaceKernelTest(unittest.TestCase):
         # check that the shape of the internal variable is correct.
         assert self.traction_is_correct_shape()
 
+    # keep this!
     def test_scalar_val_all_nodes(self):
         """ tests defining a pressure as a scalar field at all nodes
         """
@@ -258,17 +287,6 @@ class SurfaceKernelTest(unittest.TestCase):
                           self.problem.fes['u'].num_face_quads,
                           1)
 
-        # NOTE: I'm not sure if we're going to support defining
-        #       a scalar field at each node of shape (num_total_nodes,); 
-        #       this becomes a bit ambiguous as what if we want to set
-        #       something with one of the following shapes:
-        #
-        #       - (num_total_cells, )
-        #       - (num_nodes_per_cell, )
-        #       - (num_total_quads, )
-        #
-        #       there is a chance that num_total_cells == num_total_quads,
-        #       so this would be impossible to distinguish.
         onptest.assert_(expected_shape == scalar_shape)
 
 if __name__ == "__main__":
