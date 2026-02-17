@@ -692,20 +692,47 @@ class Problem(metaclass=MethodWrappingMeta):
     def _get_var_type_dict(self, val, fe_key, surf_fn, var_key):
         return val[fe_key][surf_fn][var_key]
 
-    # a function to help reshape the given variable. can handle both
-    # quads and nodes.
-    #
-    # NOTE: should probably only allow this to be used with quads.
+    # a function to help reshape a given variable
+    # for internal use only
     def _map_surface_var(self, var, num_face_cells, num_local_pts, fe_key, surf_fn):
+        """ maps a given variable defined on a surface to (num_faces, num_face_quads, ...)
+
+        To be used internally in self.set_internal_vars_surfaces. var CANNOT be a float
+        currently, if a scalar field is desired, the user needs to provide var as a scalar 
+        field defined on cells, or quadrature points.
+
+        Accepted inputs:
+            - (num_faces, )
+            - (num_faces, num_quads)
+            - (num_faces, num_quads, ...)
+            - (..., )
+
+        Note that if num_faces == ... and you try to define a vector-valued field
+        everywhere via (..., ), this function will fail.
+            
+
+        Parameters
+        ----------
+        var : np.ndarray
+            surface variable
+        num_face_cells : int
+            number of faces on a given boundary
+        num_local_pts : int
+            number of quadrature points on a given face
+        fe_key : str
+            fe field
+        surf_fn : str
+            surface map / location function.
+
+        Returns
+        -------
+        np.ndarray
+            (num_face_cells, num_local_pts, ...)
+
+        """
         
+        # a single value is defined
         if len(var.shape) == 1:
-            # # might want to deprecate this - seems ripe for issues.
-            # if var.shape[0] == num_face_cells:
-            #     # this should allow for a scalar field to be defined at each cell.
-            #     var_reshaped = np.tile(var, (1, num_local_pts)).T
-            # assumes (vec,) or (1,) - doesn't allow for a scalar field defined
-            # at each unique node yet.
-            # else:
         
             if len(var) > self.fes[fe_key].vec:
                 raise ValueError(f"Try adding a dimension to your surface variable," \
