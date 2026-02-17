@@ -340,5 +340,29 @@ class SurfaceKernelTest(unittest.TestCase):
 
         onptest.assert_(expected_shape == scalar_shape)
 
+    def test_scalar_cells_quads(self):
+        """ tests defining traction at quads on each cell facet.
+        """
+
+        # traction defined on each node (value is constant, but shape is not.).
+        t_nodes = np.tile(1, (len(self.problem.cells_face_dict['u']['top']), 
+                              self.problem.fes['u'].num_face_quads))
+        
+        # NOTE: variables should be:
+        #       (num_faces, num_face_quads, a), right?
+
+        # turn the traction into the appropriate dictionary / structure
+        traction_dict = self.get_internal_vars_surf_dict(t_nodes)
+
+        # set the traction
+        self.problem.set_internal_vars_surfaces(traction_dict)
+
+        # check that the shape of the internal variable is correct.
+        scalar_shape = self.problem.internal_vars_surfaces['u']['top']['a'].shape
+        expected_shape = (len(self.problem.cells_face_dict['u']['top']), 
+                          self.problem.fes['u'].num_face_quads)
+
+        onptest.assert_(expected_shape == scalar_shape)
+
 if __name__ == "__main__":
     unittest.main()
