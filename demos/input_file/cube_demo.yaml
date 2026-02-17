@@ -67,7 +67,6 @@ solver_info:
     max_iter: 20
     atol: 1.0e-6
 
-
 plot_info:
   plot: True
   filename: "output.png"

@@ -291,7 +291,7 @@ class FE_manager():
 
         if self.solver_params["solver_type"] == "Newton":
             solver = Newton_Solver(problem, np.zeros(self.problem.num_total_dofs_all_vars))
-
+        self.solver_params = solver_params["solver_params"]
         return solver
 
     def plotting(self, sol):
@@ -303,11 +303,24 @@ class FE_manager():
         Returns:
             _type_: _description_
         """
-        # TBD
+        
+        mesh = self.fes[self.fe_params["var"]].mesh
+        vec = self.fes[self.fe_params["var"]].vec
+        mesh.point_data["sol"] = sol.reshape(-1, vec)
+
+        if vec == 1:
+            warped = mesh.warp_by_scalar("sol", factor=1)
+        else:
+            warped = mesh.warp_by_vector("sol", factor=1)
+
+        pl = pv.Plotter(off_screen=True)
+        pl.add_mesh(warped, scalars="sol", show_edges=True)
+        pl.show(screenshot=str(self.parent / self.plot_params["filename"]))
+
         return
 
     ############ callable functions to solve a problem ##############
-    def solve_problem(self, solver_params: dict) -> tuple[ArrayLike, dict]:
+    def solve_problem(self, solver_params: dict | None = None) -> tuple[ArrayLike, dict]:
         """ solves problem specified from input file
 
         Solves a problem to completion (default behavior). Automatically chooses the 
@@ -319,8 +332,12 @@ class FE_manager():
             solution to problem at nodes/DOFs and information regarding the problem's convergence 
 
         """
+        if solver_params is not None:
+            self.solver_params = solver_params
+        sol, info = self.solver.solve(**self.solver_params)
 
-        sol, info = self.solver.solve(**solver_params["solver_params"])
+        if self.plot_params["plot"]:
+            self.plotting(sol)
 
         return sol, info
 
