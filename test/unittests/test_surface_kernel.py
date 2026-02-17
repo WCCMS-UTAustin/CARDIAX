@@ -80,9 +80,18 @@ class SurfaceKernelTest(unittest.TestCase):
         problem = HyperElasticity({"u": fe},
                                 dirichlet_bc_info=dirichlet_bc_info,
                                 location_fns=location_fns)
+        
+        # create an identical problem class instance where we choose to save boundary nodes
+        # that are associated with 'top'
+        problem_w_bndry = HyperElasticity({"u": fe},
+                                dirichlet_bc_info=dirichlet_bc_info,
+                                location_fns=location_fns)
+        # get the boundary nodes - can eventually include this step in the __init__ method, maybe?
+        problem_w_bndry.set_surface_map_bndry_inds()
 
-        # save the problem object.
+        # save the problem objects.
         cls.problem = problem
+        cls.problem_w_bndry = problem_w_bndry
 
         # define a traction to re-use everywhere
         cls.t = np.array([1.0, 0.0, 0.0])
@@ -141,16 +150,18 @@ class SurfaceKernelTest(unittest.TestCase):
         # check that the shape of the internal variable is correct.
         onptest.assert_(self.traction_is_correct_shape())
 
+        # code below was working, but I'm deprecating the ability to pass a single surface variable
+        # defined ON NODES, while maintaining this ability on quads.
         # ADDITIONALLY - repeat this but 'at nodes' to check that the evaluation
         #                is the same.
-        surface_var_old = onp.array(self.problem.internal_vars_surfaces['u']['top']['a'].tolist())
+        # surface_var_old = onp.array(self.problem.internal_vars_surfaces['u']['top']['a'].tolist())
 
-        # update the internal var
-        traction_dict_new = self.get_internal_vars_surf_dict(self.t)
-        self.problem.set_internal_vars_surfaces(traction_dict_new, 1)
+        # # update the internal var
+        # traction_dict_new = self.get_internal_vars_surf_dict(self.t)
+        # self.problem.set_internal_vars_surfaces(traction_dict_new, 1)
 
-        # check that old and new variables are the same
-        onptest.assert_allclose(self.problem.internal_vars_surfaces['u']['top']['a'], surface_var_old)
+        # # check that old and new variables are the same
+        # onptest.assert_allclose(self.problem.internal_vars_surfaces['u']['top']['a'], surface_var_old)
 
 
     # CHECK if this produces a different result from the code above.
@@ -218,19 +229,48 @@ class SurfaceKernelTest(unittest.TestCase):
     #     # check that the shape of the internal variable is correct.
     #     assert self.traction_is_correct_shape()
     
-    @unittest.skip("not implemented yet")
+
     def test_variable_boundary_nodes(self):
         """ tests defining a vector-valued field on only the boundary nodes of the mesh
 
         """
 
-    @unittest.skip("not implemented yet")
+        # hardcoded - 9 faces, in a 3x3 format, are on the surface of our mesh.
+        # this means we have 4x4 nodes -> 16 total surface nodes.
+        boundary_info = np.ones((16,3))
+        traction_dict = self.get_internal_vars_surf_dict(boundary_info)
+
+        # set the traction
+        # 1 -> defines things at NODES.
+        self.problem_w_bndry.set_internal_vars_surfaces(traction_dict, 1)
+
+        # check that the shape of the internal variable is correct.
+        onptest.assert_(self.traction_is_correct_shape())
+
     def test_scalar_variable_boundary_nodes(self):
         """ tests defining a scalar field on only the boundary nodes of the mesh
 
         """
 
-    @unittest.skip("not implemented yet")
+        # hardcoded - 9 faces, in a 3x3 format, are on the surface of our mesh.
+        # this means we have 4x4 nodes -> 16 total surface nodes.
+        boundary_info = np.ones((16,1))
+        traction_dict = self.get_internal_vars_surf_dict(boundary_info)
+
+        # set the traction
+        # 1 -> defines things at NODES.
+        self.problem_w_bndry.set_internal_vars_surfaces(traction_dict, 1)
+
+        # check that the shape of the internal variable is correct.
+        # onptest.assert_(self.traction_is_correct_shape())
+        expected_shape = (len(self.problem.cells_face_dict['u']['top']), 
+                          self.problem.fes['u'].num_face_quads,
+                          1)
+        
+        surface_var_shape = self.problem_w_bndry.internal_vars_surfaces['u']['top']['a'].shape
+
+        onptest.assert_(surface_var_shape == expected_shape)
+
     @unittest.expectedFailure
     def test_boundary_nodes_undef_bndry(self):
         """ tests setting surface variable with boundary nodes on a boundary
@@ -239,6 +279,17 @@ class SurfaceKernelTest(unittest.TestCase):
 
         # NOTE: add an additional surface_map
         #       in the problem class in this file.
+        # hardcoded - 9 faces, in a 3x3 format, are on the surface of our mesh.
+        # this means we have 4x4 nodes -> 16 total surface nodes.
+        boundary_info = np.ones((16,3))
+        traction_dict = self.get_internal_vars_surf_dict(boundary_info)
+
+        # try setting traction for a problem class that doesn't have
+        # boundary inds defined.
+        self.problem.set_internal_vars_surfaces(traction_dict, 1)
+
+        # check that the shape of the internal variable is correct.
+        # onptest.assert_(self.traction_is_correct_shape())
 
 
     # keep this!

@@ -563,6 +563,10 @@ class Problem(metaclass=MethodWrappingMeta):
             int_var_surf_fe = {}
             for surf_fn in self.internal_vars_surfaces[fe_key]:
                 int_var_surf_fe_fn = {}
+                # get boundary inds in case we need them.
+                bndry_inds = self.boundary_inds_dict[fe_key][surf_fn]
+                bndry_cell_inds = self.fes[fe_key].cells[bndry_inds[:,0]]
+
                 # get each variable in the 
                 try:
                     for var_key in internal_vars_surfaces[fe_key][surf_fn]:
@@ -599,11 +603,49 @@ class Problem(metaclass=MethodWrappingMeta):
                             var_reshaped_quads = self._map_surface_var(var, face_shape[0], num_face_quads, fe_key, surf_fn)
                         # input is defined on nodes
                         elif var_loc == 1:
-                            var_reshaped_nodes = self._map_surface_var(var, face_shape[0], num_nodes, fe_key, surf_fn)
-                            # NOTE: I'm not sure if this function will work on a subset of the domain.
-                            # var_reshaped_quads = self.fes[fe_key].convert_dof_to_quad(var_reshaped_nodes)
-                            # breakpoint()
-                            # might need to validate this.
+
+                            # only want to allow for the following inputs:
+                            # - (num total nodes, ...)
+                            # - (num_face_nodes, ...)   (requires point_data in self.fes[fe_key].mesh)
+
+                            # value is passed via a list of all nodes
+                            if var.shape[0] == self.fes[fe_key].nodes.shape[0]:
+                                # need to map all nodes -> boundary *cells*
+                                var_reshaped_nodes = var[bndry_cell_inds]
+
+                            # value is passed on the boundary nodes
+                            # need to check if the point data exists!
+                            else:
+                                # check that the boundary data has the right shape
+                                # maybe we set a separate 
+                                # boundary_expected_shape = self.fes[fe_key].mesh.point_data[surf_fn].shape
+                                
+                                # should try to generate this...
+                                boundary_expected_shape = self.surface_map_bndry_inds[fe_key][surf_fn].shape
+                                
+                                # ^ this will throw an error if the boundary isn't defined on the mesh 
+                                if boundary_expected_shape[0] == var.shape[0]:
+                                    
+                                    # map boundary inds -> full inds
+                                    # self.surface_map_bndry_inds[fe_key][surf_fn] # might need these
+                                    bndry_nodes_shape = list(var.shape)
+                                    bndry_nodes_shape[0] = len(self.fes[fe_key].nodes)
+                                    var_reshaped_nodes_flat = np.zeros(bndry_nodes_shape)
+                                    var_reshaped_nodes_flat = var_reshaped_nodes_flat.at[self.surface_map_bndry_inds[fe_key][surf_fn]].set(var)
+                                    
+                                    # map from all nodes -> cell nodes
+                                    var_reshaped_nodes = var_reshaped_nodes_flat[bndry_cell_inds]
+
+                                else:
+                                    raise ValueError(f"Boundary data has the wrong shape for {var_key} on {surf_fn}. Got {var.shape}, expected \
+                                                     ({boundary_expected_shape[0]}, ...) or ({self.fes[fe_key].nodes.shape[0]}, ...).")
+
+                            # # NOTE: should only be 'mapping' a scalar value from (..., ) -> (num_face_nodes, ...),
+                            # #       can't map to (num_faces, num_nodes, ...).
+                            # var_reshaped_nodes = self._map_surface_var(var, face_shape[0], num_nodes, fe_key, surf_fn)
+                            # # NOTE: I'm not sure if this function will work on a subset of the domain.
+                            # # var_reshaped_quads = self.fes[fe_key].convert_dof_to_quad(var_reshaped_nodes)
+                            # # might need to validate this.
                             var_reshaped_quads = np.sum(var_reshaped_nodes[:,None,:,:] * self.selected_face_shape_vals[fe_key][surf_fn][:,:,:,None], axis=2)
                         else:
                             raise ValueError(f"var_loc is {var_loc}, which is invalid. Must be 0 or 1.")
@@ -652,16 +694,10 @@ class Problem(metaclass=MethodWrappingMeta):
 
     # a function to help reshape the given variable. can handle both
     # quads and nodes.
+    #
+    # NOTE: should probably only allow this to be used with quads.
     def _map_surface_var(self, var, num_face_cells, num_local_pts, fe_key, surf_fn):
-        # TODO: allow for an option where *unique* nodes that are on the
-        #       face are used to provide the variable.
-        #
-        #       this functionality doesn't exist in cardiax yet.
-
-        # TODO: outline all allowed cases; these nested if statements
-        #       might be more expensive than a simple outline of 4-6
-        #       possible input cases... need to check this out.
-        # check if each possible input shape is valid
+        
         if len(var.shape) == 1:
             # # might want to deprecate this - seems ripe for issues.
             # if var.shape[0] == num_face_cells:
@@ -1110,3 +1146,89 @@ class Problem(metaclass=MethodWrappingMeta):
         """Used for solving inverse problems.
         """
         raise NotImplementedError("Child class must implement this function!")
+
+    ##########################################################################
+    ## helper functions
+    ##########################################################################
+    # helper functions for get_sruface_map_bndry_inds, eventually move these to _problem.py
+    def _faux_value_fn(self, point):
+        # return value does not matter.
+        return 0
+    
+    # a method that sets boundary inds for surface maps.
+    # don't currently have a way of setting one of these without overwriting
+    # the rest of them... might eventually want to add this.
+    def set_surface_map_bndry_inds(self, surface_map_dict=None):
+        """ sets self.surface_map_bndry_inds
+
+        Defines boundary indices for given surface maps. Checks if
+        each location function has a corresponding field in fe.mesh.point_data,
+        and if not, we generate this set of points some other way.
+
+        I should have some functions in SurfaceMesh that achieve this, will try
+        to borrow from there!! Actual implementation is TBD.
+
+        Parameters
+        ----------
+        surface_map_dict : _type_
+            _description_
+
+        """
+
+        # if no surface map dict is defined, we can obtain it from self.get_surface_maps!
+        if surface_map_dict is None:
+            # only need keys from this
+            surface_map_dict = self.get_surface_maps()
+
+        # get lists of boundary indices for each surface map
+        surface_map_bndry_inds = {}
+
+        for fe_key in surface_map_dict:
+            mesh = self.fes[fe_key].mesh
+            surface_map_bndry_inds[fe_key] = {}
+            for surf_map in surface_map_dict[fe_key]:
+                # check if the point data exists
+                if surf_map in mesh.point_data.keys():
+                    bndry_inds = mesh.point_data[surf_map]
+                # get the boundary nodes otherwise
+                else:
+                    # SurfaceMesh? or re-use the functions used
+                    # to get dirichlet boundary conditions?
+
+                    # similar to getting dirichlet dofs, but we just need
+                    # the NODE index, not the dof index.
+                    bndry_inds = self.get_surface_map_bndry_inds(fe_key, surf_map)
+
+                # hopefully this allows us to map things easily!
+                surface_map_bndry_inds[fe_key][surf_map] = bndry_inds
+
+        # set the boundary indices
+        self.surface_map_bndry_inds = surface_map_bndry_inds
+
+    # helper function, to move to _problem, that identifies DOFs subjected to a surface_map
+    def get_surface_map_bndry_inds(self, fe_key, surf_map):
+        """ gets boundary indices for a given surface map.
+
+        Identifies the indices of nodes that lie on a given boundary.
+        Previously, we were only storing the cell # and face #, so this
+        makes handling surface integrals a bit easier.
+
+        Parameters
+        ----------
+        fe_key : str
+        surf_map : str
+
+        Returns
+        -------
+        np.ndarray
+            indices of nodes that lie on the boundary, provided as a location function,
+            of surf_map.
+        """
+        # get the location function
+        loc_fn = self.location_fns[fe_key][surf_map]
+        
+        # can prescribe 'components' and 'value_fcs'
+        node_inds_list, _, _ = self.fes[fe_key].Dirichlet_boundary_conditions(([loc_fn], [0], [self._faux_value_fn]))
+
+        # node_inds_list is a list, we just want the array.
+        return node_inds_list[0]
