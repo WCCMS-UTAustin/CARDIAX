@@ -96,6 +96,7 @@ env.bak/
 venv.bak/
 
 # Extra
+.vscode/**
 **/*.vtk
 **/*.vtu
 **/*.gif

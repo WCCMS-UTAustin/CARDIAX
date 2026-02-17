@@ -4,11 +4,12 @@ import functools
 def method_wrapper(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        self._allowed_to_set = True  # Allow setting attributes within the method
+        was_allowed = getattr(self, '_allowed_to_set', False)
         try:
+            self._allowed_to_set = True  # Allow setting attributes within the method
             result = func(self, *args, **kwargs)
         finally:
-            self._allowed_to_set = False  # Disallow setting attributes after the method
+            self._allowed_to_set = was_allowed  # Disallow setting attributes after the method
         return result
     return wrapper
 
