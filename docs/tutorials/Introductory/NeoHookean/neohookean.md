@@ -1,5 +1,5 @@
 
-# NeoHookean
+# NeoHookean (WORK IN PROGRESS)
 
 ## NeoHookean Equation
 
