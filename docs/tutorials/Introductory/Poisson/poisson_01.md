@@ -35,9 +35,11 @@ fe = FiniteElement(mesh, vec=1, dim=2, ele_type="quad", gauss_order=1)
 We utilize inheritance to specify the PDE since the `Problem` class works in the generality of the bilinear and linear form mentioned previously. We then have a choice of predefined kernels that can be evaluated:
 
 $$
-\texttt{get\_tensor\_map}(u\_grad) := \int_\Omega (u\_grad) \cdot \nabla v dV \\
-\texttt{get\_mass\_map}(u, u\_grad, x) := \int_\Omega f(u, u\_grad, x) v dV \\
-\texttt{get\_surface\_maps}(u, u\_grad, x) := \int_{\partial \Omega} v g(u, u\_grad, x) \cdot \mathbf{n} dS
+\begin{aligned}
+    \texttt{get_tensor_map}(u\_grad) &:= \int_\Omega (u\_grad) \cdot \nabla v dV \\\\
+    \texttt{get_mass_map}(u, u\_grad, x) &:= \int_\Omega f(u, u\_grad, x) v dV \\\\
+    \texttt{get_surface_maps}(u, u\_grad, x) &:= \int_{\partial \Omega} v g(u, u\_grad, x) \cdot \mathbf{n} dS
+\end{aligned}
 $$
 
 For our problem, we need to fill in the `get\_tensor\_map` and `get\_mass\_map`. Since we have dirichlet boundary conditions, these appear through lifting the solution by a constant after the solve, so we have no surface maps defined. Also pay attention to the variables that are predetermined as inputs.

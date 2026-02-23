@@ -57,8 +57,8 @@ bc_bottom = [[bottom], [0], [zero_bc]]
 dirichlet_bc_info = {"u": [bc_left, bc_right, bc_top, bc_bottom]}
 
 problem = Poisson({"u": fe}, dirichlet_bc_info=dirichlet_bc_info)
-I = np.array([[1., 0.], [0., 1.]])
-A = np.array([[1., 1.], [0., 1.]])
+I = np.array([[1., 0.], [0., 1.]]).reshape(1, 2, 2)
+A = np.array([[1., 1.], [0., 1.]]).reshape(1, 2, 2)
 
 # Create instance of Newton_Solver
 solver = Newton_Solver(problem, np.zeros((len(mesh.points), 1)))
@@ -96,5 +96,5 @@ if plotting := True:
     pl.add_mesh(mesh, cmap="inferno", copy_mesh=True)
     pl.view_xy()
     pl.add_title("Anisotropic", font_size=12)
-    pl.screenshot("../../figures/Introductory/poisson/poisson_anisotropic.png")
+    pl.screenshot("../../../docs/figures/Introductory/poisson/poisson_anisotropic.png")
     pl.close()

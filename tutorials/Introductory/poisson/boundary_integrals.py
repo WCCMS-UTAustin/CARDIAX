@@ -73,5 +73,5 @@ if plotting := True:
     warped = mesh.warp_by_scalar("sol", factor=1.)
     pl.add_mesh(mesh, cmap="inferno", color="white", opacity=0.5)
     pl.add_mesh(warped, cmap="inferno", show_edges=True)
-    pl.screenshot("../../figures/Introductory/poisson/poisson_surface.png")
+    pl.screenshot("../../../docs/figures/Introductory/poisson/poisson_surface.png")
     pl.close()

@@ -69,7 +69,7 @@ if plotting := True:
 
     pl = pv.Plotter(off_screen=True)
     pl.add_mesh(mesh, show_edges=True, color="white", opacity=0.5)
-    pl.screenshot("../../figures/Introductory/poisson/poisson_mesh.png")
+    pl.screenshot("../../../docs/figures/Introductory/poisson/poisson_mesh.png")
     pl.close()
 
     def f(x):
@@ -93,5 +93,5 @@ if plotting := True:
                 scalar_bar_args={"title": "u"},
                 clim=[1.5 * sol.min(), 1.5 * sol.max()])
     pl.add_title("Solution u")
-    pl.screenshot("../../figures/Introductory/poisson/poisson_isotropic.png")
+    pl.screenshot("../../../docs/figures/Introductory/poisson/poisson_isotropic.png")
     pl.close()
