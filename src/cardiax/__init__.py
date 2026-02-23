@@ -66,4 +66,4 @@ from .Lagrange.post_process import (
 )
 
 ############### Input File Capabilities ###################
-from .input_file.input_file import FE_manager as FE_manager
+from .input_file.input_file import ProblemManager as ProblemManager

@@ -45,13 +45,13 @@ class PDE(Problem):
 
         return first_PK_stress
 
-    def set_params(self, params):
+    def set_params(self, params: dict = {}):
         # Default parameters
-        self.c = params.get('c', 1522.083)
+        self.c = params.get('c', 1522.083/(100**2))
         self.A1 = params.get('A1', 12.)
         self.A2 = params.get('A2', 8.)
         self.A3 = params.get('A3', 26.)
-        self.K = params.get('K', 1e5)
+        self.K = params.get('K', 1e5/(100**2))
         self.alpha = params.get('alpha', 2.125)
         self.beta = params.get('beta', 1.4)
         return

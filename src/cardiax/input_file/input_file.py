@@ -4,8 +4,8 @@ Call (python run.py input_file.yaml)
 """
 
 import functools as fctls
+from cardiax.input_file.config import ProblemConfig
 import yaml
-import meshio
 import pyvista as pv
 from pathlib import Path
 import importlib
@@ -13,13 +13,15 @@ import jax.numpy as np
 import numpy as onp
 import jax
 from jaxtyping import ArrayLike
+from .config import FEConfig, get_dict
+from dataclasses import asdict
 
 import cardiax
 from cardiax import FiniteElement, Problem, Newton_Solver
 from cardiax._solver import Solver_Base
 from cardiax.input_file.input_file_helper import add_surface_kernels
 
-class FE_manager():
+class ProblemManager():
     """This class is responsible for loading the input file and generating the 
     appropriate classes: FiniteElement, Problem, and Solver, to then be used to 
     solve the PDE in a reproducible manner. When setup appropriately,
@@ -32,7 +34,7 @@ class FE_manager():
         _type_: _description_
     """
 
-    def __init__(self, input_file, savedir=None):
+    def __init__(self, ProblemConfig: ProblemConfig):
         """Add documentation
 
         Args:
@@ -42,35 +44,19 @@ class FE_manager():
             _type_: _description_
         """
 
-        with open(input_file) as f:
-            params = yaml.safe_load(f)
-
-        self.parent = Path(params['directory'])
-        
-        # load parameters from yaml/input file
-        self.fe_params = params['fe_info']
-        self.pde_params = params['pde_info']
-        self.solver_params = params['solver_info']
-        self.dirichlet_bc_params = params['dirichlet_bc_info']
-        self.surface_maps_params = params['surface_maps_info']
-        self.plot_params = params["plot_info"]
+        self.config = ProblemConfig
 
         # process the input file; generate FE, Problem, and Solver classes!
-        self.fes, self.internal_vars = self.fe_loader(fe_params=self.fe_params)
-        self.dirichlet_bc_info = self.dirichlet_bc_loader(dirichlet_bc_params=self.dirichlet_bc_params)
-        self.location_fns, self.surface_kernels, self.internal_vars_surfaces = self.surface_maps_loader(surface_maps_params=self.surface_maps_params)
-        self.problem = self.problem_loader(pde_params=self.pde_params, fes=self.fes, dirichlet_bc_info=self.dirichlet_bc_info,
-                                            location_fns=self.location_fns, surface_kernels=self.surface_kernels,
-                                            internal_vars=self.internal_vars, internal_vars_surfaces=self.internal_vars_surfaces)
-        self.solver = self.solver_loader(problem=self.problem, solver_params=self.solver_params)
-
-        if savedir is not None:
-            with open(savedir / input_file.name, "w") as f:
-                yaml.dump(params, f, sort_keys=False)
-
+        self.fes, self.internal_vars = self.fe_loader(config=self.config.fe_config)
+        self.problem = self.problem_loader(config=self.config.pde_config)
+        self.solver = self.solver_loader(config=self.config.solver_config)
         return
 
-    def fe_loader(self, fe_params: dict) -> tuple[FiniteElement, dict]:
+    @classmethod
+    def from_yaml(cls, input_file: Path):
+        return cls(ProblemConfig.from_yaml(input_file))
+
+    def fe_loader(self, config: FEConfig) -> tuple[FiniteElement, dict]:
         """ loads FE object from provided mesh data.
 
         Raises
@@ -80,16 +66,15 @@ class FE_manager():
         """
 
         # read in mesh as .vtk file
-        try:
-            mesh = pv.read((self.parent / fe_params['mesh_path']).resolve())
-        except: # TODO: Find specific error
-            name = fe_params["generate_mesh"]["name"]
-            meshgen = getattr(cardiax, name)
-            mesh = meshgen(**fe_params["generate_mesh"]["kwargs"])
+        if config.mesh_path is not None:
+            mesh = pv.read((self.config.directory / config.mesh_path).resolve())
+        else:
+            meshgen = getattr(cardiax, config.mesh_generator["name"])
+            mesh = meshgen(**config.mesh_generator["kwargs"])
 
         # create and save FiniteElement object
-        fes = {fe_params["var"]: FiniteElement(mesh, **fe_params["fe_params"])}
-        internal_vars = {"u": {}}
+        fes = {config.var: FiniteElement(mesh, **config.kwargs)}
+        internal_vars = {config.var: {}}
         return fes, internal_vars
 
     def dirichlet_bc_loader(self, dirichlet_bc_params: dict):
@@ -218,9 +203,7 @@ class FE_manager():
 
         return location_fns, surface_kernels, internal_vars_surfaces
 
-    def problem_loader(self, pde_params=dict, fes=dict[str, FiniteElement], dirichlet_bc_info=dict, 
-                       location_fns=dict, surface_kernels=dict,
-                       internal_vars=dict, internal_vars_surfaces=dict):
+    def problem_loader(self, config: ProblemConfig):
         """Add documentation
 
         Args:
@@ -230,29 +213,39 @@ class FE_manager():
             _type_: _description_
         """
 
+        # Load predefined PDEs
         base_path = Path(cardiax.__file__).parent / "PDEs"
         pde_dirs = {p.parent.name for p in base_path.glob("**/*.py")}
 
-        # This should be a catch all for the PDEs we have
-        # Needs more testing though
-        if pde_params["pde_class"] in pde_dirs:
-            pde_path = list(base_path.glob(f"**/{pde_params['pde_class']}"))[0]
+        # Check if custom path given
+        if config.custom_path is not None:
+            custom_path = config.custom_path
+            module = importlib.import_module(custom_path.replace("/", "."))
+            Problem_class = getattr(module, "PDE")
+
+            pde_constants = get_dict(config.pde_info, "constants")
+
+        # Check if PDE is in predefined PDEs
+        elif config.pde_info["pde_class"] in pde_dirs:
+            pde_path = list(base_path.glob(f"**/{config.pde_info["pde_class"]}"))[0]
             pdes = {p.name[:-3] for p in pde_path.glob("*.py")}
-            assert pde_params["pde_type"] in pdes, f"PDE type not supported. Please choose between {pdes}"
-            mm = f"{pde_path}/{pde_params['pde_type']}"
+            assert config.pde_info["pde_type"] in pdes, f"PDE type not supported. Please choose between {pdes}"
+            mm = f"{pde_path}/{config.pde_info["pde_type"]}"
             cardiax_ind = mm.find("cardiax")
             module = importlib.import_module(mm[cardiax_ind:].replace("/", "."))
             Problem_class = getattr(module, "PDE")
 
-            try:
-                pde_constants = pde_params["material_constants"]
-            except KeyError:
-                pde_constants = {}
+            pde_constants = get_dict(config.pde_info, "constants")
 
         else:
             raise ValueError("PDE type not supported. Please choose between", pde_dirs)
 
-        Problem_class = add_surface_kernels(Problem_class, surface_kernels)
+        # Create dirichlet_bc_info and surface_maps dictionaries
+        self.dirichlet_bc_info = self.dirichlet_bc_loader(dirichlet_bc_params=config.dirichlet_bc_info)
+        self.location_fns, self.surface_kernels, self.internal_vars_surfaces = self.surface_maps_loader(surface_maps_params=config.surface_maps_info)
+
+        Problem_class = add_surface_kernels(Problem_class, self.surface_kernels)
+
         problem = Problem_class(self.fes, dirichlet_bc_info=self.dirichlet_bc_info, location_fns=self.location_fns)
 
         try:
@@ -271,15 +264,15 @@ class FE_manager():
                     else:
                         raise ValueError("Internal variable value must be 'mesh' or a float.")
                 internal_vars_temp[fe_key] = int_vars_temp
-            internal_vars = internal_vars_temp
+            self.internal_vars = internal_vars_temp
         except: pass #TODO Find error here
 
         problem.set_params(pde_constants)
-        problem.set_internal_vars(internal_vars)
-        problem.set_internal_vars_surfaces(internal_vars_surfaces)
+        problem.set_internal_vars(self.internal_vars)
+        problem.set_internal_vars_surfaces(self.internal_vars_surfaces)
         return problem
     
-    def solver_loader(self, problem: Problem, solver_params: dict) -> Solver_Base:
+    def solver_loader(self, config) -> Solver_Base:
         """Add documentation
 
         Args:
@@ -289,35 +282,36 @@ class FE_manager():
             _type_: _description_
         """
 
-        if self.solver_params["solver_type"] == "Newton":
-            solver = Newton_Solver(problem, np.zeros(self.problem.num_total_dofs_all_vars))
-        self.solver_params = solver_params["solver_params"]
+        if config.name == "Newton":
+            solver = Newton_Solver(self.problem, np.zeros(self.problem.num_total_dofs_all_vars))
+        self.solver_kwargs = config.kwargs
         return solver
 
-    def plotting(self, sol):
-        """Add documentation
+    ### May want to do plotting as a separate library
+    # def plotting(self, sol):
+    #     """Add documentation
 
-        Args:
-            degree (_type_): _description_
+    #     Args:
+    #         degree (_type_): _description_
 
-        Returns:
-            _type_: _description_
-        """
+    #     Returns:
+    #         _type_: _description_
+    #     """
         
-        mesh = self.fes[self.fe_params["var"]].mesh
-        vec = self.fes[self.fe_params["var"]].vec
-        mesh.point_data["sol"] = sol.reshape(-1, vec)
+    #     mesh = self.fes[self.fe_params["var"]].mesh
+    #     vec = self.fes[self.fe_params["var"]].vec
+    #     mesh.point_data["sol"] = sol.reshape(-1, vec)
 
-        if vec == 1:
-            warped = mesh.warp_by_scalar("sol", factor=1)
-        else:
-            warped = mesh.warp_by_vector("sol", factor=1)
+    #     if vec == 1:
+    #         warped = mesh.warp_by_scalar("sol", factor=1)
+    #     else:
+    #         warped = mesh.warp_by_vector("sol", factor=1)
 
-        pl = pv.Plotter(off_screen=True)
-        pl.add_mesh(warped, scalars="sol", show_edges=True)
-        pl.show(screenshot=str(self.parent / self.plot_params["filename"]))
+    #     pl = pv.Plotter(off_screen=True)
+    #     pl.add_mesh(warped, scalars="sol", show_edges=True)
+    #     pl.show(screenshot=str(self.parent / self.plot_params["filename"]))
 
-        return
+    #     return
 
     ############ callable functions to solve a problem ##############
     def solve_problem(self, solver_params: dict | None = None) -> tuple[ArrayLike, dict]:
@@ -333,8 +327,8 @@ class FE_manager():
 
         """
         if solver_params is not None:
-            self.solver_params = solver_params
-        sol, info = self.solver.solve(**self.solver_params)
+            self.solver_kwargs = solver_params
+        sol, info = self.solver.solve(**self.solver_kwargs)
 
         if self.plot_params["plot"]:
             self.plotting(sol)
@@ -365,3 +359,11 @@ class FE_manager():
         tagged_nodes = jax.vmap(mask_fn)(self.fes[fe_var].mesh.points.astype(np.float64))
 
         return self.fes[fe_var].mesh.points[tagged_nodes].astype(np.float64)
+    
+    def dump_config(self, save_dir: Path, filename: str):
+        """Dumps this specific manager's configuration to a YAML file."""
+        save_dir.mkdir(parents=True, exist_ok=True)
+        file_path = save_dir / filename
+        
+        with open(file_path, "w") as f:
+            yaml.safe_dump(asdict(self.config), f, sort_keys=False)

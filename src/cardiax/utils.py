@@ -53,4 +53,3 @@ def save_sol(fe: FiniteElement, sol, sol_file, cell_type, cell_infos=None, point
                 assert len(data) == len(sol), "point data wrong shape!"
                 out_mesh.point_data[name] = onp.array(data, dtype=onp.float32)
     out_mesh.write(sol_file)
-
