@@ -574,7 +574,10 @@ class Problem(metaclass=MethodWrappingMeta):
                         # TODO: turn this into a function; this is called repeatedly/is too bulky.
                         # 1. get the integer that identifies whether we are given nodes or quads
                         var_loc = var_expected_shape_fn(var_location, fe_key, surf_fn, var_key)
-
+                        # print("---------------- var loc --------------")
+                        # print(var_loc)
+                        # print("---------------------------------------")
+                        
                         # if var_loc == 0 -> quads (default)
                         # if var_loc == 1 -> nodes
 
@@ -591,6 +594,8 @@ class Problem(metaclass=MethodWrappingMeta):
 
                         # need to check if these can be blank... this seems to overwrite existing data with
                         # an empty dictionary, so I'm not sure what it's purpose is.
+
+                        # breakpoint()
                         
                         # empty data - always handled the same.
                         # breakpoint()
@@ -609,7 +614,8 @@ class Problem(metaclass=MethodWrappingMeta):
                             # - (num_face_nodes, ...)   (requires point_data in self.fes[fe_key].mesh)
 
                             # value is passed via a list of all nodes
-                            if var.shape[0] == self.fes[fe_key].nodes.shape[0]:
+                            # these are actually points!!!
+                            if var.shape[0] == self.fes[fe_key].points.shape[0]:
                                 # need to map all nodes -> boundary *cells*
                                 var_reshaped_nodes = var[bndry_cell_inds]
 
@@ -629,7 +635,7 @@ class Problem(metaclass=MethodWrappingMeta):
                                     # map boundary inds -> full inds
                                     # self.surface_map_bndry_inds[fe_key][surf_fn] # might need these
                                     bndry_nodes_shape = list(var.shape)
-                                    bndry_nodes_shape[0] = len(self.fes[fe_key].nodes)
+                                    bndry_nodes_shape[0] = len(self.fes[fe_key].points)
                                     var_reshaped_nodes_flat = np.zeros(bndry_nodes_shape)
                                     var_reshaped_nodes_flat = var_reshaped_nodes_flat.at[self.surface_map_bndry_inds[fe_key][surf_fn]].set(var)
                                     
@@ -658,6 +664,7 @@ class Problem(metaclass=MethodWrappingMeta):
                         int_var_surf_fe_fn[var_key] = var_reshaped_quads
 
                 except Exception as e:
+                    print(f"{var_reshaped_quads.shape[:2]} != {(face_shape[0], num_face_quads)}")
                     raise ValueError(f"Error processing self.internal_vars_surfaces for finite element field {fe_key}: {e}")
                 
                 int_var_surf_fe[surf_fn] = int_var_surf_fe_fn
@@ -954,7 +961,8 @@ class Problem(metaclass=MethodWrappingMeta):
         else:
             return fe_values
 
-
+    # NOTE: might want to have a custom version of this to handle contact forces. would avoid
+    #       having to map contact forces manually... gotta check this out.
     @timeit
     def compute_face(self, cells_dof_list: dict, jac_flag: bool, 
                      internal_vars_surfaces: Union[tuple, dict]) -> Union[jax.Array, tuple[jax.Array, jax.Array]]:
