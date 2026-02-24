@@ -121,7 +121,7 @@ class FiniteElement(Base_FE):
         Returns:
             np.ndarray: Basis function supports for each cell
         """
-        return self.cells
+        return np.array(self.cells)
 
     def get_cell_dof_supports(self) -> ArrayLike:
         """_summary_
@@ -136,7 +136,7 @@ class FiniteElement(Base_FE):
         cell_dof_map = onp.zeros((self.num_cells, self.num_nodes*self.vec))
         for index, cell in enumerate(self.cells):
             cell_dof_map[index] = onp.hstack(onp.array([onp.arange(entry*self.vec, entry*self.vec + self.vec) for entry in cell]))
-        return cell_dof_map.astype(onp.int32)
+        return cell_dof_map.astype(np.int32)
 
     def convert_dof_to_quad(self, var: jax.Array) -> jax.Array:
         """ Converts DoFs to quadrature points. Needed if internal variables

@@ -76,6 +76,7 @@ for f in forces:
     problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([f])}}})
     sol, info = solver.solve(max_iter=50)
     assert info[0]
+    solver.initial_guess = sol
     sols.append(sol)
 
 if plotting := True:
