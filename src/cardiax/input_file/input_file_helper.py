@@ -92,7 +92,7 @@ def create_pressure_kernel_static(value):
         F_inv = 1/J * np.array([[F[1, 1] * F[2, 2] - F[1, 2] * F[2, 1], F[0, 2] * F[2, 1] - F[0, 1] * F[2, 2], F[0, 1] * F[1, 2] - F[0, 2] * F[1, 1]],
                                 [F[1, 2] * F[2, 0] - F[1, 0] * F[2, 2], F[0, 0] * F[2, 2] - F[0, 2] * F[2, 0], F[0, 2] * F[1, 0] - F[0, 0] * F[1, 2]],
                                 [F[1, 0] * F[2, 1] - F[1, 1] * F[2, 0], F[0, 1] * F[2, 0] - F[0, 0] * F[2, 1], F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]]])
-        val = 133.322/100**2 * value * J * F_inv.T @ normal.reshape(3, 1)
+        val = value * J * F_inv.T @ normal.reshape(3, 1)
         return val.reshape(3)
     
     return pressure_kernel
@@ -114,7 +114,7 @@ def create_pressure_kernel_functional():
                                 [F[1, 2] * F[2, 0] - F[1, 0] * F[2, 2], F[0, 0] * F[2, 2] - F[0, 2] * F[2, 0], F[0, 2] * F[1, 0] - F[0, 0] * F[1, 2]],
                                 [F[1, 0] * F[2, 1] - F[1, 1] * F[2, 0], F[0, 1] * F[2, 0] - F[0, 0] * F[2, 1], F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]]]).T
         # val = value * J * F_inv.T @ normal.reshape(3, 1)
-        val = 133.322/100**2 * value * J * F_inv.T @ normal
+        val = value * J * F_inv.T @ normal
         return val
         #return val.reshape(3)
     
