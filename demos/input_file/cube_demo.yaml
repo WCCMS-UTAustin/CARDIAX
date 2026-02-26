@@ -1,0 +1,66 @@
+
+### What do we want to control from the input file? ###
+
+# Path to input file, mesh, and potentially other things...
+
+directory: "."
+
+### FE object ###
+
+# Mesh, quadrature, dim
+# Will need to point to a mesh
+# Make a special case if someone says cube?
+FEConfig:
+  var: "u"
+  mesh_path:
+
+  generate_mesh:
+    name: "box_mesh"
+    kwargs:
+
+  kwargs:
+    ele_type: "hexahedron"
+    gauss_order: 1
+    vec: 3
+    dim: 3
+
+### Problem object ###
+# PDE to solve (mainly Hyperelasticity)
+# Material model to use (allow adjusting constants)
+# Boundary conditions to apply
+# Faces to apply boundary conditions to (tagged mesh)
+PDEConfig:
+
+  pde_info:
+    pde_class: "Hyperelasticity"
+    pde_type: "NeoHookean" # Defines the get_tensor_map
+    constants:
+      E: 10.
+      nu: 0.3
+
+  # Potential BC types: Dirichlet, Neumann, Pressure, Spring, ...
+  # Surface must be tagged, give key value for the surface
+  dirichlet_bc_info:
+    u:
+      bc1:
+        type: "Dirichlet"
+        component: [0, 1, 2]
+        value: [0.0, 0.0, 0.0]
+        surface_tag: "bottom"
+        static: True
+
+  surface_maps_info:
+    u:
+      bc2:
+        type: "Neumann"
+        value: [0.0, 0.0, 2.0]
+        surface_tag: "top"
+        static: False
+
+  
+### Solver object ###
+SolverConfig:
+  name: "Newton"
+  kwargs:
+    max_iter: 20
+    atol: 1.0e-6

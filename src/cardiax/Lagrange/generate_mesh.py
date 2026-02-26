@@ -708,42 +708,42 @@ def prolate_spheroid_mesh(sigma_min: float = 1.35, sigma_max: float = 1.8,
     mesh = gmsh_to_meshio(msh_file, point_data=point_data)
     return mesh
 
-### Plotting meshes for docs ###
-import pyvista as pv
-import matplotlib.colors as mcolors
-import sys
+# ### Plotting meshes for docs ###
+# import pyvista as pv
+# import matplotlib.colors as mcolors
+# import sys
 
-fns = [
-    "rectangle_mesh",
-    "box_mesh",
-    "sphere_mesh",
-    "hollow_sphere_mesh",
-    "ellipsoid_mesh",
-    "hollow_ellipsoid_mesh",
-    "cylinder_mesh",
-    "hollow_cylinder_mesh",
-    "prolate_spheroid_mesh"
-]
-for fn in fns:
-    mesh = getattr(sys.modules[__name__], fn)()
+# fns = [
+#     "rectangle_mesh",
+#     "box_mesh",
+#     "sphere_mesh",
+#     "hollow_sphere_mesh",
+#     "ellipsoid_mesh",
+#     "hollow_ellipsoid_mesh",
+#     "cylinder_mesh",
+#     "hollow_cylinder_mesh",
+#     "prolate_spheroid_mesh"
+# ]
+# for fn in fns:
+#     mesh = getattr(sys.modules[__name__], fn)()
 
-    colors = ['red', "blue", "green", "magenta", "olive", "orange"]
-    pl = pv.Plotter(off_screen=True)
-    pl.add_mesh(mesh, show_edges=True, color="grey", opacity=0.25)
+#     colors = ['red', "blue", "green", "magenta", "olive", "orange"]
+#     pl = pv.Plotter(off_screen=True)
+#     pl.add_mesh(mesh, show_edges=True, color="grey", opacity=0.25)
 
-    legend_entries = []
-    for i, p in enumerate(mesh.point_data):
-        start_color = 'white'
-        end_color = colors[i]
-        custom_cmap = mcolors.LinearSegmentedColormap.from_list(
-            'temp',
-            [start_color, end_color]
-        )
-        pl.add_mesh(mesh, opacity=p, scalars=mesh.point_data[p],
-                    cmap=custom_cmap, label=p, copy_mesh=True)
-        legend_entries.append([p, colors[i]])
+#     legend_entries = []
+#     for i, p in enumerate(mesh.point_data):
+#         start_color = 'white'
+#         end_color = colors[i]
+#         custom_cmap = mcolors.LinearSegmentedColormap.from_list(
+#             'temp',
+#             [start_color, end_color]
+#         )
+#         pl.add_mesh(mesh, opacity=p, scalars=mesh.point_data[p],
+#                     cmap=custom_cmap, label=p, copy_mesh=True)
+#         legend_entries.append([p, colors[i]])
 
-    pl.remove_scalar_bar()
-    pl.add_axes()
-    pl.add_legend(legend_entries, face="^", loc='upper right', bcolor='white')
-    pl.screenshot(f'../../../docs/figures/meshes/{fn}.png')
+#     pl.remove_scalar_bar()
+#     pl.add_axes()
+#     pl.add_legend(legend_entries, face="^", loc='upper right', bcolor='white')
+#     pl.screenshot(f'../../../docs/figures/meshes/{fn}.png')

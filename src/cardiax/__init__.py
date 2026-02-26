@@ -64,3 +64,6 @@ from .Lagrange.post_process import (
     compute_traction as compute_traction,
     get_surface_normals_nodes_current as get_surface_normals_nodes_current,
 )
+
+############### Input File Capabilities ###################
+from .input_file.input_file import ProblemManager as ProblemManager
