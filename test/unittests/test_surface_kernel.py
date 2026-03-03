@@ -86,6 +86,7 @@ class SurfaceKernelTest(unittest.TestCase):
         problem_w_bndry = HyperElasticity({"u": fe},
                                 dirichlet_bc_info=dirichlet_bc_info,
                                 location_fns=location_fns)
+        
         # get the boundary nodes - can eventually include this step in the __init__ method, maybe?
         problem_w_bndry.set_surface_map_bndry_inds()
 

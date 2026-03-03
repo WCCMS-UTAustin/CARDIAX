@@ -1214,17 +1214,33 @@ class Problem(metaclass=MethodWrappingMeta):
             mesh = self.fes[fe_key].mesh
             surface_map_bndry_inds[fe_key] = {}
             for surf_map in surface_map_dict[fe_key]:
-                # check if the point data exists
-                if surf_map in mesh.point_data.keys():
-                    bndry_inds = mesh.point_data[surf_map]
-                # get the boundary nodes otherwise
-                else:
-                    # SurfaceMesh? or re-use the functions used
-                    # to get dirichlet boundary conditions?
+                # update: due to inconsistencies in how self.fes.mesh.poin_data[surf_fn]
+                #         and self.surface_map_bndry_inds are defined, I'm not allowing
+                #         boundary inds to be pre-set for now.
+                # # check if the point data exists
+                # if surf_map in mesh.point_data.keys():
+                #     bndry_inds = mesh.point_data[surf_map]
+                # # get the boundary nodes otherwise
+                # else:
+                
+                
+                # update: forcibly re-evaluate surface map to get the boundary
+                #         inds of the surface in question.
+                #
+                #         we might need to actually then index these points and find
+                #         the number of unique boundary points; I thought
+                #         self.get_sruface_map_bndry_inds was supposed to do this? I
+                #         am a tad confused right now.
 
-                    # similar to getting dirichlet dofs, but we just need
-                    # the NODE index, not the dof index.
-                    bndry_inds = self.get_surface_map_bndry_inds(fe_key, surf_map)
+
+                # SurfaceMesh? or re-use the functions used
+                # to get dirichlet boundary conditions?
+
+                # similar to getting dirichlet dofs, but we just need
+                # the NODE index, not the dof index.
+                bndry_inds = self.get_surface_map_bndry_inds(fe_key, surf_map)
+
+                # breakpoint()
 
                 # hopefully this allows us to map things easily!
                 surface_map_bndry_inds[fe_key][surf_map] = bndry_inds
