@@ -664,7 +664,7 @@ class Problem(metaclass=MethodWrappingMeta):
                         int_var_surf_fe_fn[var_key] = var_reshaped_quads
 
                 except Exception as e:
-                    print(f"{var_reshaped_quads.shape[:2]} != {(face_shape[0], num_face_quads)}")
+                    # print(f"{var_reshaped_quads.shape[:2]} != {(face_shape[0], num_face_quads)}")
                     raise ValueError(f"Error processing self.internal_vars_surfaces for finite element field {fe_key}: {e}")
                 
                 int_var_surf_fe[surf_fn] = int_var_surf_fe_fn
