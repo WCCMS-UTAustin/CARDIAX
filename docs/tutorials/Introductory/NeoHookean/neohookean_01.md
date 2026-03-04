@@ -17,13 +17,21 @@ from cardiax import Newton_Solver
 from cardiax import FiniteElement
 ```
 
-Now that we've imported the appropriate packages, we will define the PDE. As mentioned in the mathematical description, we need to compute a kernel
+Now that we've imported the appropriate packages, we will define the PDE. The left-hand side of the mathematical description,
 
 $$
-\int_{\Omega_0} \mathbf{P} : \nabla \mathbf{v} dV
+\int_{\Omega_0} \mathbf{P} : \nabla \mathbf{v} dV,
 $$
 
-Since we are contracting $\mathbf{P}$ against the gradient of the test function, we must use the `get_tensor_map`. To compute $\mathbf{P}$, we leverage the autodiff capabilities of JAX's `grad` function and just need to define the strain energy. This greatly simplifies changing material models since tensor forms don't have to be derived. Lastly, we want to compute a surface integral for the traction where the boundary will be defined as the top surface.
+is incorporated by computing the corresponding "kernel." Since we are contracting $\mathbf{P}$ against the gradient of the test function, we must use `get_tensor_map`. To compute $\mathbf{P}$, we leverage the autodiff capabilities of JAX's `grad` function and just need to define the strain energy density function. This choice greatly simplifies changing material models since tensor forms don't have to be manually derived.
+
+Lastly, we want to compute a surface integral for the traction where the boundary will be defined as the top surface,
+
+$$
+\int_{\Gamma} \mathbf{t} \cdot \mathbf{v} dS.
+$$
+
+This term will be incorporated into `get_surface_maps` as follows.
 
 ```python
 class HyperElasticity(Problem):
@@ -80,7 +88,7 @@ def top(point):
     return np.isclose(point[2], 3., atol=1e-5)
 ```
 
-Now we define a zero value function for the dirichlet BCs to fix the bottom of the beam in the x, y, and z directions. The `location_fn` is then defined to be the top surface where the traction is applied.
+Now we define a zero-value function for the Dirichlet BCs to fix the bottom of the beam in the x, y, and z directions. The `location_fn` is then defined to be the top surface where the traction is applied.
 
 ```python
 # Define Dirichlet boundary values.
@@ -120,7 +128,7 @@ assert info[0]
 This gives us the solution
 ![alt text](../../../figures/Introductory/neohookean/beam_disp.png)
 
-Now, if you would like to obtain a movie showing the motion as the traction is built up, we solve over the range of traction values. Since the traction loading is continuous with respect to the solution in this example, we can use the previous solution state as the new initial guess for the next step with `solver.initial_guess = sol`. Since the main assumption of Newton is being close to the solution, this one line offers major benefits when solving sequential problems.
+Now, if you would like to obtain a movie showing the motion as the traction is built up, we solve over the range of traction values. Since the traction loading is continuous with respect to the solution in this example, we can use the previous solution state as the new initial guess for the next forward solve with `solver.initial_guess = sol`. Since the main assumption of Newton-Raphson iteration is the intial guess being sufficiently close to the solution, this one line offers major benefits when solving sequential problems.
 
 ```python
 sols = []
