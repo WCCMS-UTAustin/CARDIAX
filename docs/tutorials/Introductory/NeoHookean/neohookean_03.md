@@ -1,5 +1,5 @@
 
-# JAX-Aware Implementation
+# JAX-Aware Implementation for Changing Boundary Conditions
 
 A very critical component for maintaining high speed simulations within `CARDIAX` is knowing how to appropriately modify problems to keep high efficiency. While we have done our best to try and keep everything optimally performant in a vast number of scenarios, we obviously haven't caught them all. This example showcases one such scenario.
 
