@@ -3,9 +3,9 @@
 
 A very critical component for maintaining high speed simulations within `CARDIAX` is knowing how to appropriately modify problems to keep high efficiency. While we have done our best to try and keep everything optimally performant in a vast number of scenarios, we obviously haven't caught them all. This example showcases one such scenario.
 
-A common problem in biomechanics is solving many boundary value problems in series given experimental data. A prime example is when force-displacement data is measured for material testing. This tutorial is strictly showcasing the loss of performance when these dirichlet values are set inappropriately. Other tutorials will be linked once completed to show how to post-process simulations for desired quantities and how to solve inverse problems to find the material parameters.
+A common problem in biomechanics is solving many boundary value problems in series given experimental data. A prime example is when force-displacement data is measured for material testing. This tutorial is strictly showcasing the loss of performance when these Dirichlet values are set inappropriately. Other tutorials will be linked, once completed, to show how to post-process simulations for desired quantities and how to solve inverse problems to find the material parameters.
 
-## Implementation
+## Common Setup
 
 We import our standard modules, but notice that we now import functools as well.
 
@@ -49,7 +49,7 @@ class HyperElasticity(Problem):
         return first_PK_stress
 ```
 
-Now create the unit cube with appropriate field.
+Now create the unit cube.
 
 ```python
 # Specify mesh-related information (first-order hexahedron element).
@@ -117,7 +117,11 @@ toc = time.time()
 jit_time = toc - tic
 ```
 
-Now, we will demonstrate the comparison between the fast and slow implementations. The major reason that we achieve much faster simulation speed is through the Jitted functions that run extremely fast on the GPU. The problem is interlacing CPU native functions with GPU ones. In this loop, we incrementally solve 25 problems between tractions of 0. and 0.1 by reinitializing the dirichlet boundary conditions at each step through the `set_dirichlet_bc_info` method. This means that we are recomputing the boundary data at each step.
+## Slow (Inefficient) Implementation of Boundary Conditions
+
+Now, we will demonstrate the comparison between the fast and slow implementations. The major reason that we achieve fast simulation speed in general is through JIT compilation of functions that run extremely fast on the GPU. Inefficiencies arise when interlacing CPU-native functions with GPU-native ones.
+
+In the following loop, we showcase an inefficient implentation of incrementally solving 25 problems between tractions of 0. and 0.1 by reinitializing the Dirichlet boundary conditions at each step through the `set_dirichlet_bc_info` method. This means that we are recomputing the boundary data at each step.
 
 ```python
 vals = np.linspace(0., 0.1, 25)
@@ -133,7 +137,9 @@ tic = time.time()
 slow_set = tic - toc
 ```
 
-The more clever approach is to recognize that the `bc_inds` remain fixed for a given protocol. Thus, we only need to appropriately scale the data if we set the initial values to magnitude of 1.
+## Fast (Efficient) Implementation of Boundary Conditions
+
+The more efficient approach is obtained by recognition that `bc_inds` remain fixed for a given protocol. Thus, we only need to appropriately scale the data if we set the initial values to magnitude of 1.
 
 ```python
 dirichlet_bc_info = set_bcs(1.)
@@ -141,7 +147,7 @@ problem.set_dirichlet_bc_info(dirichlet_bc_info)
 bc_inds, bc_vals = problem.get_boundary_data()
 ```
 
-Now we use the `set_bc_vals` to just replace the current bc_vals by the specified ones. To allow for more general cases, the entire bc_vals vector must be the input of the function. Now, nearly all the computation remains on the GPU.
+Now we use the `set_bc_vals` to just replace the current bc_vals by the specified ones. To allow for more general cases, the entire `bc_vals` vector must be the input of the function. Now, nearly all the computation remains on the GPU.
 
 ```python
 vals = np.linspace(0., 0.1, 25)
