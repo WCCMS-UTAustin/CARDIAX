@@ -1,8 +1,8 @@
 # Import some useful modules.
 import jax
 import jax.numpy as np
-import os
-from pathlib import Path
+import time
+import functools as fctls
 
 from cardiax import box_mesh
 from cardiax import Problem
@@ -41,59 +41,85 @@ class HyperElasticity(Problem):
         return {"u": {"top": surface_map}}
 
 # Specify mesh-related information (first-order hexahedron element).
-mesh = box_mesh(Nx=10, Ny=10, Nz=50, Lx=1., Ly=1., Lz=5.)
+mesh = box_mesh(Nx=10, Ny=10, Nz=10, Lx=1., Ly=1., Lz=1.)
 fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = "hexahedron", gauss_order = 1)
 
 # Define boundary locations.
-def bottom(point):
-    return np.isclose(point[2], 0., atol=1e-5)
+def left(point):
+    return np.isclose(point[0], 0., atol=1e-5)
 
-def top(point):
-    return np.isclose(point[2], 5., atol=1e-5)
+def right(point):
+    return np.isclose(point[0], 1., atol=1e-5)
 
 # Define Dirichlet boundary values.
-def zero_dirichlet_val(point):
+def zero(point):
     return 0.
 
-bc1 = [[bottom] * 3, [0, 1, 2],
-        [zero_dirichlet_val] * 3]
-dirichlet_bc_info = {"u": [bc1]}
-location_fns = {"u": {"top": top}}
+def val(value, point):
+    return value
+
+def set_bcs(value):
+    
+    bc_left = [
+        [left] * 3, 
+        [0, 1, 2],
+        [fctls.partial(val, -value), zero, zero]
+        ]
+    bc_right = [
+        [right] * 3, 
+        [0, 1, 2],
+        [fctls.partial(val, value), zero, zero]
+        ]
+    return {"u": [bc_left, bc_right]}
+
+dirichlet_bc_info = set_bcs(0.1)
 
 problem = HyperElasticity({"u": fe},
-                          dirichlet_bc_info=dirichlet_bc_info,
-                          location_fns=location_fns)
-
+                          dirichlet_bc_info=dirichlet_bc_info)
 solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
 
-forces = np.linspace(0, .025, 21, endpoint=True)
+tic = time.time()
+sol, info = solver.solve(max_iter=50) # Jitting solve
+assert info[0]
+toc = time.time()
+jit_time = toc - tic
 
-problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([forces[-1]])}}})
-sol0 = solver.solve(max_iter=50)[0]
-
+vals = np.linspace(0., 0.1, 25)
+toc = time.time()
 sols = []
-for f in forces:
-    problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([f])}}})
-    sol, info = solver.solve(max_iter=50)
-    assert info[0]
+for v in vals:
+    dirichlet_bcs = set_bcs(v)
+    problem.set_dirichlet_bc_info(dirichlet_bcs)
     solver.initial_guess = sol
+    sol, info = solver.solve(max_iter=50)
     sols.append(sol)
+tic = time.time()
+slow_set = tic - toc
+
+dirichlet_bc_info = set_bcs(1.)
+problem.set_dirichlet_bc_info(dirichlet_bc_info)
+bc_inds, bc_vals = problem.get_boundary_data()
+
+vals = np.linspace(0., 0.1, 25)
+toc = time.time()
+sols = []
+for v in vals:
+    problem.set_bc_vals(v * bc_vals)
+    solver.initial_guess = sol
+    sol, info = solver.solve(max_iter=50)
+    sols.append(sol)
+tic = time.time()
+fast_set = tic - toc
+
+print(f"Jit time: {jit_time:.2f} seconds")
+print(f"Slow set time: {slow_set:.2f} seconds")
+print(f"Fast set time: {fast_set:.2f} seconds")
 
 if plotting := True:
-    fig_dir = Path("../../figures/Introductory/neohookean/")
+    from pathlib import Path
+    fig_dir = Path("../../../docs/figures/Introductory/neohookean/")
     import pyvista as pv
     import numpy as onp
-
-    pl = pv.Plotter(off_screen=True)
-    mesh.point_data["sol"] = onp.array(sol0).reshape(-1, fe.dim)
-    warped = mesh.warp_by_vector("sol", factor=1.)
-    pl.add_mesh(warped)
-    pl.camera_position = 'xy'
-    pl.camera.roll += 90
-    pl.camera.azimuth += 30
-    pl.camera.elevation += 30.
-    pl.screenshot(fig_dir / "beam_disp.png")
-    pl.close()
 
     pl = pv.Plotter(off_screen=True)
     mesh.point_data["sol"] = onp.array(sols[0]).reshape(-1, fe.dim)
@@ -104,13 +130,13 @@ if plotting := True:
     pl.camera.roll += 90
     pl.camera.azimuth += 30
     pl.camera.elevation += 30.
-    pl.open_gif(fig_dir / "beam_movie.gif")
+    pl.open_gif(fig_dir / "dirch_slow_movie.gif")
 
     for i, s in enumerate(sols):
         pl.clear()
         mesh.point_data["sol"] = onp.array(s).reshape(-1, fe.dim)
         warped = mesh.warp_by_vector("sol", factor=1.)
-        pl.add_title(f"force = {forces[i]:.3f}")
-        pl.add_mesh(warped, reset_camera=False)
+        pl.add_title(f"disp = {vals[i]:.3f}")
+        pl.add_mesh(warped, scalars="sol", reset_camera=False)
         pl.write_frame()
     pl.close()
