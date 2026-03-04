@@ -18,11 +18,10 @@ nav:
           - Combination: tutorials/Introductory/Poisson/poisson_04.md
 
         - NeoHookean:
-          - Mathematical Description: tutorials/Introductory/NeoHookean/neo_hookean_00.md
-          - Compressible: tutorials/Introductory/NeoHookean/neo_hookean_01.md
-          - Incompressible: tutorials/Introductory/NeoHookean/neo_hookean_02.md
-          - Live load: tutorials/Introductory/NeoHookean/neo_hookean_03.md
-          - Combination: tutorials/Introductory/NeoHookean/neo_hookean_04.md
+          - Mathematical Description: tutorials/Introductory/NeoHookean/neohookean_00.md
+          - Beam Bending: tutorials/Introductory/NeoHookean/neohookean_01.md
+          - Twisting Cube: tutorials/Introductory/NeoHookean/neohookean_02.md
+          - JAX-Aware Implementation for Changing Boundary Conditions: tutorials/Introductory/NeoHookean/neohookean_03.md
 
       - Intermediate:
         - Hyperelasticity: tutorials/Intermediate/hyperelasticity.md
