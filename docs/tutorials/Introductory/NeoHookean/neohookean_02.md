@@ -52,7 +52,7 @@ def right(point):
     return np.isclose(point[0], 1., atol=1e-5)
 ```
 
-The dirichlet boundary values are more complex now. We are twisting the right face by an angle of $\theta = \pi/2$ while the left is held fixed. So we have two value functions that represent the rotation applied to the face with the rotation center at (0.5, 0.5) in the y and z coordinates.
+The Dirichlet boundary values are more complex now. We are twisting the right face by an angle of $\theta = \pi/2$ while the left is held fixed. So we have two value functions that represent the rotation applied to the face with the rotation center at (0.5, 0.5) in the y and z coordinates.
 
 ```python
 # Define Dirichlet boundary values.
@@ -80,7 +80,7 @@ bc_right = [
 dirichlet_bc_info = {"u": [bc_left, bc_right]}
 ```
 
-We now initialize the problem with only dirichlet boundary conditions.
+We now initialize the problem with only Dirichlet boundary conditions.
 
 ```python
 problem = HyperElasticity({"u": fe},
@@ -99,7 +99,7 @@ We can now view this lifted representation to see what is being treated as the i
 
 ![alt text](../../../figures/Introductory/neohookean/dirch_distorted_fail.png)
 
-Depending on if the solve fails or not, you may need to build up the dirichlet displacements to prevent too much distortion. Now let's see if the solve holds.
+Depending on if the solve fails or not, you may need to build up the Dirichlet displacements to prevent too much distortion. Now let's see if the solve holds.
 
 ```python
 solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
@@ -107,7 +107,7 @@ sol, info = solver.solve(max_iter=10)
 assert info[0]
 ```
 
-This time, the assertion fails. This means that the Newton solve failed to converge to the desired tolerance within the specified number of iterations. Determining why the solve failed for generic problems can be very difficult. Given the setup, we know failure occurred because of the over-twisting of the cube, and we get this error message:
+This time, the assertion fails. This means that the Newton solve failed to converge to the desired tolerance within the specified number of iterations. Determining why the solve failed for generic problems can be very difficult. Given the context of this setup, we know failure occurred because of over-twisting of the cube compared to the initial guess, and we get this error message:
 
 ```
 Traceback (most recent call last):
