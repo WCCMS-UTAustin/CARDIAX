@@ -18,7 +18,7 @@ $$
 We can obtain a displacement field $\mathbf{u} = \varphi(\mathbf{X}) - \mathbf{X}$ with $\mathbf{X}$ as the reference coordinate, where $\mathbf{u}$ will be the variable of interest. Then we have the deformation gradient $\mathbf{F}(\mathbf{X}) = \nabla \mathbf{\varphi} = \nabla \mathbf{u} + \mathbf{I}$. To obtain the First Piola Kirchhoff stress tensor, we need to define the strain energy which is where this becomes hyperelasticity. We define the strain energy as a Neo-Hookean
 
 $$
-\Psi(\mathbf{F}) = c_1 (\mathbf{F}^T \mathbf{F} - 3 - 2\ln(J)) + c_2 (J - 1)^2
+\Psi(\mathbf{F}) = c_1 (\text{tr}({\mathbf{F}^T \mathbf{F}}) - 3 - 2\ln(J)) + c_2 (J - 1)^2
 $$
 
 where $J = \det(\mathbf{F})$. Now differentiating with respect to $\mathbf{F}$ will give us
@@ -39,6 +39,4 @@ $$
 \int_{\Omega_0} \mathbf{P} : \nabla \mathbf{v} dV = \int_{\Gamma} \mathbf{t} \cdot \mathbf{v} dS
 $$
 
-Now we have the contraction of two tensors that can occur on a per element level and a boundary condition that can be applied to the desired face. Now let's look into how we solve these problems.
-
-Since the discretization steps are beyond these tutorials, we've only done them for the most basic example and will focus on the theoretics and code.
+where \mathbf{t} is the traction vector on the boundary $\Gamma$. Now we have the contraction of two tensors that can occur on a per element level and a boundary condition that can be applied to the desired face. Now let's look into how we solve these problems.

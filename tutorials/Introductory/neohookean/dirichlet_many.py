@@ -2,7 +2,6 @@
 import jax
 import jax.numpy as np
 import time
-from pathlib import Path
 import functools as fctls
 
 from cardiax import box_mesh
@@ -73,18 +72,17 @@ def set_bcs(value):
         ]
     return {"u": [bc_left, bc_right]}
 
-dirichlet_bc_info = set_bcs(1.)
+dirichlet_bc_info = set_bcs(0.1)
 
 problem = HyperElasticity({"u": fe},
                           dirichlet_bc_info=dirichlet_bc_info)
-bc_inds, bc_vals = problem.get_boundary_data()
+solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
 
-
-
-
-sol = np.zeros((problem.num_total_dofs_all_vars))
-solver = Newton_Solver(problem, sol)
+tic = time.time()
 sol, info = solver.solve(max_iter=50) # Jitting solve
+assert info[0]
+toc = time.time()
+jit_time = toc - tic
 
 vals = np.linspace(0., 0.1, 25)
 toc = time.time()
@@ -98,6 +96,10 @@ for v in vals:
 tic = time.time()
 slow_set = tic - toc
 
+dirichlet_bc_info = set_bcs(1.)
+problem.set_dirichlet_bc_info(dirichlet_bc_info)
+bc_inds, bc_vals = problem.get_boundary_data()
+
 vals = np.linspace(0., 0.1, 25)
 toc = time.time()
 sols = []
@@ -109,10 +111,12 @@ for v in vals:
 tic = time.time()
 fast_set = tic - toc
 
+print(f"Jit time: {jit_time:.2f} seconds")
 print(f"Slow set time: {slow_set:.2f} seconds")
 print(f"Fast set time: {fast_set:.2f} seconds")
 
 if plotting := True:
+    from pathlib import Path
     fig_dir = Path("../../../docs/figures/Introductory/neohookean/")
     import pyvista as pv
     import numpy as onp

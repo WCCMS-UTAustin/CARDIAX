@@ -1,8 +1,6 @@
 # Import some useful modules.
 import jax
 import jax.numpy as np
-import os
-from pathlib import Path
 
 from cardiax import box_mesh
 from cardiax import Problem
@@ -64,14 +62,15 @@ problem = HyperElasticity({"u": fe},
                           dirichlet_bc_info=dirichlet_bc_info,
                           location_fns=location_fns)
 
+force = 0.025
+problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([force])}}})
+
 solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
-
-forces = np.linspace(0, .025, 21, endpoint=True)
-
-problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([forces[-1]])}}})
-sol0 = solver.solve(max_iter=50)[0]
+sol0, info = solver.solve(max_iter=50)
+assert info[0]
 
 sols = []
+forces = np.linspace(0, .025, 21, endpoint=True)
 for f in forces:
     problem.set_internal_vars_surfaces({"u": {"top": {"t": np.array([f])}}})
     sol, info = solver.solve(max_iter=50)
@@ -80,9 +79,20 @@ for f in forces:
     sols.append(sol)
 
 if plotting := True:
-    fig_dir = Path("../../../docs/figures/Introductory/neohookean/")
+    from pathlib import Path
     import pyvista as pv
     import numpy as onp
+
+    fig_dir = Path("../../../docs/figures/Introductory/neohookean/")
+
+    pl = pv.Plotter(off_screen=True)
+    pl.add_mesh(mesh, color="white", scalars=None, show_edges=True)
+    pl.camera_position = 'xy'
+    pl.camera.roll += 90
+    pl.camera.azimuth += 30
+    pl.camera.elevation += 30.
+    pl.screenshot(fig_dir / "beam_mesh.png")
+    pl.close()
 
     pl = pv.Plotter(off_screen=True)
     mesh.point_data["sol"] = onp.array(sol0).reshape(-1, fe.dim)
@@ -95,7 +105,6 @@ if plotting := True:
     pl.screenshot(fig_dir / "beam_disp.png")
     pl.close()
 
-    exit()
     pl = pv.Plotter(off_screen=True)
     mesh.point_data["sol"] = onp.array(sols[0]).reshape(-1, fe.dim)
     warped = mesh.warp_by_vector("sol", factor=1.)
