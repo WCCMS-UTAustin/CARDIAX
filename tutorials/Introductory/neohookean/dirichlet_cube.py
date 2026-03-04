@@ -1,8 +1,6 @@
 # Import some useful modules.
 import jax
 import jax.numpy as np
-import os
-from pathlib import Path
 
 from cardiax import box_mesh
 from cardiax import Problem
@@ -15,7 +13,7 @@ class HyperElasticity(Problem):
 
         def psi(F):
             E = 10.
-            nu = 0.3
+            nu = 0.45
             mu = E / (2. * (1. + nu))
             kappa = E / (3. * (1. - 2. * nu))
             J = np.linalg.det(F)
@@ -33,13 +31,6 @@ class HyperElasticity(Problem):
 
         return first_PK_stress
     
-    def get_surface_maps(self):
-
-        def surface_map(u, u_grad, x, t):
-            return np.array([t[0], 0., 0.])
-                
-        return {"u": {"top": surface_map}}
-
 # Specify mesh-related information (first-order hexahedron element).
 mesh = box_mesh(Nx=10, Ny=10, Nz=10, Lx=1., Ly=1., Lz=1.)
 fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = "hexahedron", gauss_order = 1)
@@ -79,19 +70,26 @@ problem = HyperElasticity({"u": fe},
                           dirichlet_bc_info=dirichlet_bc_info)
 
 solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
-sol, info = solver.solve(max_iter=50)
+sol, info = solver.solve(max_iter=10)
+assert info[0]
+
+
 
 if plotting := True:
+    from pathlib import Path
     fig_dir = Path("../../../docs/figures/Introductory/neohookean/")
     import pyvista as pv
     import numpy as onp
 
-    pl = pv.Plotter(off_screen=True)
+    pl = pv.Plotter(shape=(1, 2), off_screen=True)
     zero_sol = onp.zeros((problem.num_total_dofs_all_vars))
     bc_inds, bc_vals = problem.get_boundary_data()
     zero_sol[bc_inds] = bc_vals
     mesh.point_data["sol"] = onp.array(zero_sol).reshape(-1, fe.dim)
     warped = mesh.warp_by_vector("sol", factor=1.)
+    pl.subplot(0, 0)
+    pl.add_mesh(mesh, scalars=None, color="white", show_edges=True)
+    pl.subplot(0, 1)
     pl.add_mesh(warped, scalars="sol", show_edges=True)
     pl.screenshot(fig_dir / "dirch_distorted.png")
     pl.close()
