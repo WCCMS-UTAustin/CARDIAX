@@ -6,7 +6,7 @@ import meshio
 import os
 import unittest
 
-from cardiax import FE_manager
+from cardiax import ProblemManager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -17,8 +17,8 @@ class Test(unittest.TestCase):
 
         # input_file = "test/benchmarks/input_file/inputs.yaml"
         input_file = "inputs.yaml"
-        manager = FE_manager(input_file)
-        sol, info = manager.solver.solve(**manager.solver_params["solver_params"])
+        manager = ProblemManager.from_yaml(input_file)
+        sol, info = manager.solve_problem()
         assert info[0]
 
 if __name__ == '__main__':
