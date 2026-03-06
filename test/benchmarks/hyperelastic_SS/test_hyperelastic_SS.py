@@ -20,7 +20,7 @@ class HyperElasticity(Problem):
     def get_tensor_map(self):
         def psi(F):
             mu = 50.
-            kappa = 1e3
+            kappa = 5e3
             C1 = mu/2
             D1 = kappa/2
             J = np.linalg.det(F)
@@ -41,7 +41,7 @@ class Test(unittest.TestCase):
     def test_solve_problem(self):
         """ Test hyperelasticity analytic solution for shear
         """
-        problem_name = "hyperelastic_shear"
+        problem_name = "hyperelastic_simple_shear"
         crt_dir = os.path.dirname(__file__)
 
         Lx, Ly, Lz = 1., 1., 1.
@@ -90,8 +90,9 @@ class Test(unittest.TestCase):
 
         problem = HyperElasticity({"u": fe}, dirichlet_bc_info=dirichlet_bc_info)
 
-        solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)), line_search_flag=True)
-        sol, info = solver.solve(1e-8)
+        solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)), 
+                               line_search_flag=True, precond="jacobi")
+        sol, info = solver.solve(1e-8, max_iter=40)
 
         Fs = get_F(problem.fes["u"], sol)
         F_analytic = np.array([[1., gamma, 0.],

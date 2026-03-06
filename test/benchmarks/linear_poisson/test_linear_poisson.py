@@ -28,7 +28,7 @@ class Test(unittest.TestCase):
         problem_name = "linear_poisson"
 
         N, L = 25, 1.
-        mesh = rectangle_mesh(N, N, L, L, ele_type="quad8", degree=2)
+        mesh = rectangle_mesh(N, N, L, L, ele_type="quad8")
 
         def left(point):
             return np.isclose(point[0], 0., atol=1e-5)
@@ -64,6 +64,7 @@ class Test(unittest.TestCase):
 
         problem.set_internal_vars({"u": {"f": forcing_quads}})
         sol, info = solver.solve()
+        assert info[0]
 
         # Test
         analytic_sol = forcing / (np.pi**2 * (2 ** 2 + 2 ** 2))

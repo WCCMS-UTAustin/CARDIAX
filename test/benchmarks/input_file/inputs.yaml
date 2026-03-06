@@ -68,5 +68,5 @@ pde_config:
 solver_config:
   name: "Newton"
   kwargs:
-    max_iter: 20
+    max_iter: 40
     atol: 1.0e-6
