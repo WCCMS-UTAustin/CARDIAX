@@ -330,9 +330,6 @@ class ProblemManager():
             self.solver_kwargs = solver_params
         sol, info = self.solver.solve(**self.solver_kwargs)
 
-        if self.plot_params["plot"]:
-            self.plotting(sol)
-
         return sol, info
 
     def get_tagged_nodes(self, bc, var):

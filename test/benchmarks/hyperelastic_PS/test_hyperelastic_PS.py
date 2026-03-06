@@ -37,7 +37,7 @@ class Test(unittest.TestCase):
     def test_solve_problem(self):
         """ Test hyperelasticity analytic solution for shear
         """
-        problem_name = "hyperelastic_shear"
+        problem_name = "hyperelastic_pure_shear"
         crt_dir = os.path.dirname(__file__)
 
         Lx, Ly, Lz = 1., 1., 1.
@@ -91,7 +91,8 @@ class Test(unittest.TestCase):
 
         problem = HyperElasticity({"u": fe}, dirichlet_bc_info=dirichlet_bc_info)
 
-        solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)))
+        solver = Newton_Solver(problem, np.zeros((problem.num_total_dofs_all_vars)),
+                               precond="jacobi")
         sol, info = solver.solve(1e-10)
 
         F = get_F(problem.fes["u"], sol)
