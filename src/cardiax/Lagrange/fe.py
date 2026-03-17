@@ -126,9 +126,6 @@ class FiniteElement(Base_FE):
     def get_cell_dof_supports(self) -> ArrayLike:
         """_summary_
 
-        Args:
-            var (_type_): _description_
-
         Returns:
             _type_: _description_
         """

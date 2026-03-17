@@ -138,11 +138,10 @@ def compute_traction(sol: ArrayLike, internal_vars, fe: FiniteElement, stress_fn
     """Computes the traction vector over a given surface
 
     Args:
-        problem (Problem class): needed to obtain the tensor map for 
-        the surface_fn
-        fe (FiniteElement class): Contains mesh information for FE solve
-        location_fn (function): describes the location where the surface integral
         sol (np.array): the flattened solution vector of displacements
+        fe (FiniteElement class): Contains mesh information for FE solve
+        stress_fn (Callable): The stress function for computing the Cauchy stress tensor
+        location_fn (function): describes the location where the surface integral
 
     Returns:
         float: Traction value calculated over the location_fn

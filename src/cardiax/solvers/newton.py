@@ -31,8 +31,8 @@ class Newton_Solver(Solver_Base):
             int_vars_surfs (list): list of the internal variables on the surface used in the PDE
 
         Returns:
-            np.array: residual vector
-            np.array: the jacobian of the residual
+            res_vec (np.array): residual vector
+            V (np.array): the jacobian of the residual
         """
         res_vec, V = self.problem.newton_update_helper(dofs, int_vars, int_vars_surfs)
         res_vec = self.apply_bc_vec(res_vec, dofs)

@@ -36,7 +36,6 @@ class Problem(metaclass=MethodWrappingMeta):
         location_fns (Optional[List[Callable]]): List of functions that define the locations for boundary conditions.
         fe_bindings (Optional[List[List[int]]]): List of finite element bindings, where each binding is a list of indices of finite elements that share degrees of freedom.
                                                 useful for volumetric/deviatoric split with reduced integration
-        additional_info (Any): Additional information that may be required for the problem setup.
 
     """
 
@@ -332,10 +331,8 @@ class Problem(metaclass=MethodWrappingMeta):
         Used to compute the weak form derived from the mass/body force term.
 
         Args:
-            mass_map (callable): function that gives the u term for the weak form.
-            Dimension should be 1-D
+            mass_map (callable): function that gives the u term for the weak form. (1-D)
             
-
         Returns:
             callable: function that computes the weak form of the mass term
         """
@@ -368,8 +365,7 @@ class Problem(metaclass=MethodWrappingMeta):
         Used to compute the weak form derived from the surface term.
 
         Args:
-            surface_map (callable): function that gives the vector to be contracted with the normal for the weak form.
-            Dimension should be d-D
+            surface_map (callable): function that gives the vector to be contracted with the normal for the weak form. (d-D)
 
         Returns:
             callable: function that computes the weak form of the surface term
