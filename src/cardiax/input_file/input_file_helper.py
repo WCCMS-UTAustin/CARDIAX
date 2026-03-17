@@ -107,16 +107,18 @@ def create_pressure_kernel_functional():
         _type_: _description_
     """
 
+    # TODO: make unit conversion part of config
+    # Value input as mmHg
+    # * 133.322 -> kPa
+    # / (100**2) -> N/(cm^2)
     def pressure_kernel(u, u_grad, x, normal, value):
         F = u_grad + np.eye(len(x))
         J = np.linalg.det(F)
         F_inv = 1/J * np.array([[F[1, 1] * F[2, 2] - F[1, 2] * F[2, 1], F[0, 2] * F[2, 1] - F[0, 1] * F[2, 2], F[0, 1] * F[1, 2] - F[0, 2] * F[1, 1]],
                                 [F[1, 2] * F[2, 0] - F[1, 0] * F[2, 2], F[0, 0] * F[2, 2] - F[0, 2] * F[2, 0], F[0, 2] * F[1, 0] - F[0, 0] * F[1, 2]],
                                 [F[1, 0] * F[2, 1] - F[1, 1] * F[2, 0], F[0, 1] * F[2, 0] - F[0, 0] * F[2, 1], F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]]]).T
-        # val = value * J * F_inv.T @ normal.reshape(3, 1)
-        val = value * 133.322/(100**2) * J * F_inv.T @ normal
+        val = value * 133.322 / (100**2) * J * F_inv.T @ normal
         return val
-        #return val.reshape(3)
     
     return pressure_kernel
 

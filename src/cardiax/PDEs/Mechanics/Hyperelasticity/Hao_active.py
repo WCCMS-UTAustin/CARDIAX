@@ -31,10 +31,14 @@ class PDE(Problem):
         
         P_fn = jax.grad(psi)
 
+        # TODO: Fix PDE setup to change units
+        # TCa input as kPa
+        # * 1000 -> Pa
+        # / (100^2) -> N/(cm^2)
         def S_act(F, f, TCa):
             f = f[:, None]
             lamb = np.sqrt(f.T @ F.T @ F @ f)
-            S = TCa * (1e3 / (100**2)) * (1 + self.beta * (lamb - 1))/(lamb ** 2) * f @ f.T
+            S = TCa * 1000 / (100**2) * (1 + self.beta * (lamb - 1))/(lamb ** 2) * f @ f.T
             return S
 
         def first_PK_stress(u_grad, f, s, n, TCa):
@@ -47,11 +51,13 @@ class PDE(Problem):
 
     def set_params(self, params: dict = {}):
         # Default parameters
-        self.c = params.get('c', 1522.083) / (100**2)
+        # TODO: Fix PDE setup to change units
+        # Currently the stresses, c & K are going to N/(cm^2)
+        self.c = params.get('c', 1522.083/(100**2))
         self.A1 = params.get('A1', 12.)
         self.A2 = params.get('A2', 8.)
         self.A3 = params.get('A3', 26.)
-        self.K = params.get('K', 1e5) / (100**2)
+        self.K = params.get('K', 1e5/(100**2))
         self.alpha = params.get('alpha', 2.125)
         self.beta = params.get('beta', 1.4)
         return
