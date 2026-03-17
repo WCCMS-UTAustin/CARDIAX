@@ -250,7 +250,7 @@ class ProblemManager():
 
         try:
             internal_vars_temp = {}
-            ivs = self.pde_params["internal_vars"]
+            ivs = config.pde_info["internal_vars"]
             for fe_key in ivs:
                 int_vars_temp = {}
                 for iv in ivs[fe_key]:
