@@ -24,8 +24,12 @@ nav:
           - JAX-Aware Implementation for Changing Boundary Conditions: tutorials/Introductory/NeoHookean/neohookean_03.md
 
       - Intermediate:
-        - Hyperelasticity: tutorials/Intermediate/hyperelasticity.md
-        - Inverse_Problems: tutorials/Intermediate/inverse_problems.md
+
+        - Inverse Problems:
+          - Theory: tutorials/Intermediate/Inverse Problems/inverse_00.md
+          - CARDIAX Implementation: tutorials/Intermediate/Inverse Problems/inverse_01.md
+          - Hyperelastic Example: tutorials/Intermediate/Inverse Problems/inverse_02.md
+          - Code Walkthrough: tutorials/Intermediate/Inverse Problems/inverse_03.md
 
       - Advanced:
         - Dynamic_Problems: tutorials/Advanced/dynamic_problems.md

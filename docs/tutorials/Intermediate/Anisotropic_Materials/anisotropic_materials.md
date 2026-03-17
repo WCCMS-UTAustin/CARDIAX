@@ -121,4 +121,4 @@ for f in forces:
     sols.append(sol)
 ```
 
-![alt text](../../../tutorials/figures/Introductory/neohookean/beam_movie.gif)
+![alt text](../../../figures/Introductory/neohookean/beam_movie.gif)
