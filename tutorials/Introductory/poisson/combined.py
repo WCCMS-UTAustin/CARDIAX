@@ -79,7 +79,7 @@ a_values = np.hstack([a_values, a_values[::-1]])
 
 @jax.vmap
 def D_vals(t):
-    return np.array([[1., .5*t], [.5*t, 1.]])
+    return np.array([[1., .5*t], [.5*t, 1.]]).reshape(1, 2, 2)
 
 D_values = D_vals(a_values)
 
@@ -111,23 +111,23 @@ if plotting := True:
     pl = pv.Plotter(off_screen=True)
     mesh.point_data["sol"] = sol0.reshape(-1,)
     warped = mesh.warp_by_scalar("sol", factor=1.)
-    pl.add_mesh(warped, cmap="inferno", show_edges=True)
-    pl.screenshot("../../figures/Introductory/poisson/poisson_initial.png")
+    pl.add_mesh(warped, scalars="sol", cmap="inferno", show_edges=True)
+    pl.screenshot("../../../docs/figures/Introductory/poisson/poisson_initial.png")
     pl.close()
 
     pl = pv.Plotter(off_screen=True)
     mesh.point_data["sol"] = sols[0].reshape(-1,)
     warped = mesh.warp_by_scalar("sol", factor=1.)
 
-    pl.add_mesh(warped, cmap="inferno", show_edges=True)
-    pl.open_gif("../../figures/Introductory/poisson/poisson_movie.gif")
+    pl.add_mesh(warped, scalars="sol", cmap="inferno", show_edges=True)
+    pl.open_gif("../../../docs/figures/Introductory/poisson/poisson_movie.gif")
 
     for i, s in enumerate(sols):
         pl.clear()
         mesh.point_data["sol"] = s.reshape(-1,)
         warped = mesh.warp_by_scalar("sol", factor=1.)
         pl.add_title(f"a = {a_values[i]:.2f}")
-        pl.add_mesh(warped, reset_camera=False, cmap="inferno", show_edges=True)
+        pl.add_mesh(warped, scalars="sol", reset_camera=False, cmap="inferno", show_edges=True)
         pl.write_frame()
     pl.close()
 
