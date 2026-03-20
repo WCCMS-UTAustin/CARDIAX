@@ -3,13 +3,13 @@
 
 ## NeoHookean Equation
 
-After looking at a simple theoretically nicer problem, [Poisson](poisson.md), we move towards the base of cardiac mechanics, hyperelasticity. Due to the many iterations needed to solve the associated nonlinear problems, this is where the power of the GPU-based computations really shine. The starting point is the conservation of linear momentum,
+After looking at a simple theoretically nicer problem, [Poisson](../Poisson/poisson_00.md), we move towards the base of cardiac mechanics, hyperelasticity. Due to the many iterations needed to solve the associated nonlinear problems, this is where the power of the GPU-based computations really shine. The starting point is the conservation of linear momentum,
 
 $$
 \rho_0 \ddot{\varphi} = \nabla \cdot \mathbf{P} + \rho_0 \mathbf{b}.
 $$
 
-To unpack the notation, $\varphi$ represents the motion of the body. Dynamics will be covered in [dynamics tutorial](../Advanced/dynamic_problems.md), while here we assume the body is quasi-static. By definition of quasi-static loading, $\varphi$ is independent of time, thus $\ddot{\varphi}=\mathbf{0}$. For further simplification, assume no body acceleration, $\mathbf{b} = 0$, to get
+To unpack the notation, $\varphi$ represents the motion of the body. Dynamics will be covered in [dynamics tutorial](../../Advanced/dynamic_problems.md), while here we assume the body is quasi-static. By definition of quasi-static loading, $\varphi$ is independent of time, thus $\ddot{\varphi}=\mathbf{0}$. For further simplification, assume no body acceleration, $\mathbf{b} = 0$, to get
 
 $$
 \nabla \cdot \mathbf{P} = 0.
