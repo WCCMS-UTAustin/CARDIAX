@@ -227,7 +227,7 @@ class ProblemManager():
 
         # Check if PDE is in predefined PDEs
         elif config.pde_info["pde_class"] in pde_dirs:
-            pde_path = list(base_path.glob(f"**/{config.pde_info["pde_class"]}"))[0]
+            pde_path = list(base_path.glob(f"**/{config.pde_info['pde_class']}"))[0]
             pdes = {p.name[:-3] for p in pde_path.glob("*.py")}
             assert config.pde_info["pde_type"] in pdes, f"PDE type not supported. Please choose between {pdes}"
             mm = f"{pde_path}/{config.pde_info["pde_type"]}"
