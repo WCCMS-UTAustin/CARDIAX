@@ -98,6 +98,10 @@ class ProblemManager():
 
         for fe_key in dirichlet_bc_params:
             dirichlet_bc_temp = []
+            if dirichlet_bc_params[fe_key] is None:
+                dirichlet_bc_info[fe_key] = {}
+                break
+
             for bc_num in dirichlet_bc_params[fe_key]:
                 bc = dirichlet_bc_params[fe_key][bc_num]
                 assert len(bc["component"]) == len(bc["value"])
@@ -172,13 +176,36 @@ class ProblemManager():
                 elif bc["type"] == "Robin":
                     raise ValueError("Robin BC not implemented yet.")
                     continue
+
                 elif bc["type"] == "Spring":
-                    raise ValueError("Spring BC not implemented yet.")
+
+                    assert type(bc["value"]) == float
+                    if bc["surface_tag"] is not None:
+                        tagged_nodes = self.get_tagged_nodes(bc, fe_key)
+                    else:
+                        tagged_nodes = self.create_boundary_mask(bc["surface_fn"]["point_comp"], bc["surface_fn"]["where"], fe_key)
+
+                    spring_tag = fctls.partial(surf_tag, tagged_nodes)
+
+                    location_fns_temp[bc_key] = spring_tag
+                    surface_kernels_temp[bc_key] = {"type": "Spring", "value": bc["value"], "static": bc["static"]}
+
+                    if not bc["static"]:
+                        #TODO: Make easier way to get the shape for surface kernels internal vars
+                        normals = self.fes[fe_key].get_surface_normals(spring_tag)
+                        surface_var = np.full_like(normals, np.array(bc["value"]))
+                        int_vars_surf_temp[bc_key] = {"t": surface_var}
+                    else:
+                        int_vars_surf_temp[bc_key] = {}
                     continue
+
                 elif bc["type"] == "Pressure":
                     assert isinstance(bc["value"], float)
 
-                    tagged_nodes = self.get_tagged_nodes(bc, fe_key)
+                    if bc["surface_tag"] is not None:
+                        tagged_nodes = self.get_tagged_nodes(bc, fe_key)
+                    else:
+                        tagged_nodes = self.create_boundary_mask(bc["surface_fn"]["point_comp"], bc["surface_fn"]["where"], fe_key)
 
                     neumann_tag = fctls.partial(surf_tag, tagged_nodes)
                     normals = self.fes[fe_key].get_surface_normals(neumann_tag)
