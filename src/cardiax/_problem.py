@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
 import functools
 from jaxtyping import ArrayLike
+import inspect
 
 from cardiax.common import timeit
 from cardiax import FiniteElement
@@ -63,6 +64,7 @@ class Problem(metaclass=MethodWrappingMeta):
         self.initialize_fe_vars()
         self.update_dirichlet_info()
         self.pre_jit_fns()
+        self.get_ordered_dicts()
         self._enforce_setattr = True  # Start enforcing after post-init
         self._allowed_to_set = False  # Allow setting attributes within the method
 
@@ -657,10 +659,12 @@ class Problem(metaclass=MethodWrappingMeta):
                     raise ValueError(f"Error processing self.internal_vars_surfaces for finite element field {fe_key}: {e}")
                 
                 int_var_surf_fe[surf_fn] = int_var_surf_fe_fn
+
             int_var_surf_temp[fe_key] = int_var_surf_fe
 
         # save new internal variables.
         self.internal_vars_surfaces = int_var_surf_temp
+
         return
     
     #####################################################
@@ -897,6 +901,46 @@ class Problem(metaclass=MethodWrappingMeta):
             self.kernel_face[fe_key] = temp_face
             self.kernel_jac_face[fe_key] = temp_jac_face
 
+    def get_ordered_dicts(self):
+
+        if hasattr(self, 'get_surface_maps'):
+            surface_maps = self.get_surface_maps()
+
+            surface_ordered_dict = {}
+            for fe_key in surface_maps:
+                temp_dict = {}
+                for bndry_key in surface_maps[fe_key]:
+                    temp_dict[bndry_key] = list(inspect.signature(surface_maps[fe_key][bndry_key]).parameters.keys())[3:]
+                surface_ordered_dict[fe_key] = temp_dict
+        
+        else: 
+            surface_ordered_dict = None
+
+        if hasattr(self, 'get_mass_map') or hasattr(self, 'get_tensor_map'):
+            mass_map = self.get_mass_map() if hasattr(self, 'get_mass_map') else None
+            tensor_map = self.get_tensor_map() if hasattr(self, 'get_tensor_map') else None
+
+            ordered_dict = {}
+            for fe_key in self.fes:
+                if mass_map is not None:
+                    mass_params = list(inspect.signature(mass_map).parameters.keys())[3:]
+                else:
+                    mass_params = []
+                if tensor_map is not None:
+                    tensor_params = list(inspect.signature(tensor_map).parameters.keys())[1:]
+                else:
+                    tensor_params = []
+
+                if mass_params and tensor_params:
+                    assert mass_params == tensor_params, "Mass and tensor maps should have the same parameters and ordering."
+                ordered_dict[fe_key] = mass_params or tensor_params
+        else:
+            ordered_dict = None
+
+        self.surface_ordered_dict = surface_ordered_dict
+        self.ordered_dict = ordered_dict
+        return
+
     @timeit
     def split_and_compute_cell(self, cells_dof_dict: dict[str, ArrayLike], 
                                jac_flag: bool, 
@@ -920,7 +964,9 @@ class Problem(metaclass=MethodWrappingMeta):
             vmap_kernel_fn = self.kernel_jac[fe_key] if jac_flag else self.kernel[fe_key]
             values = []
             jacs = []
-            input_collection = [cells_dof_dict[fe_key], self.physical_quad_points[fe_key], self.shape_vals[fe_key], self.shape_grads[fe_key], self.JxW[fe_key], self.v_grads_JxW[fe_key], *list(internal_vars[fe_key].values())]
+            input_collection = [cells_dof_dict[fe_key], self.physical_quad_points[fe_key], self.shape_vals[fe_key], 
+                                self.shape_grads[fe_key], self.JxW[fe_key], self.v_grads_JxW[fe_key], 
+                                *list(internal_vars[fe_key][param] for param in self.ordered_dict[fe_key])]
             num_cuts = 1 # Number of cuts should be static, and changed by user
             # TODO: Investigate the effect of num_cuts if it makes 
             # a large difference from a memory perspective (should be faster with less)
@@ -975,7 +1021,7 @@ class Problem(metaclass=MethodWrappingMeta):
 
                     input_collection = [selected_cell_sols_flat, self.physical_surface_quad_points[fe_key][bndry_key],
                                         self.selected_face_shape_vals[fe_key][bndry_key], self.selected_face_shape_grads[fe_key][bndry_key],
-                                        self.nanson_scale[fe_key][bndry_key], *list(internal_vars_surfaces[fe_key][bndry_key].values())]
+                                        self.nanson_scale[fe_key][bndry_key], *list(internal_vars_surfaces[fe_key][bndry_key][temp_key] for temp_key in self.surface_ordered_dict[fe_key][bndry_key])]
                     # Fix internal vars surface
                     val, jac = vmap_fn(*input_collection)
                     fe_vals[bndry_key] = val
@@ -995,7 +1041,7 @@ class Problem(metaclass=MethodWrappingMeta):
                     # TODO: duplicated code
                     input_collection = [selected_cell_sols_flat, self.physical_surface_quad_points[fe_key][bndry_key],
                                         self.selected_face_shape_vals[fe_key][bndry_key], self.selected_face_shape_grads[fe_key][bndry_key],
-                                        self.nanson_scale[fe_key][bndry_key], *list(internal_vars_surfaces[fe_key][bndry_key].values())]
+                                        self.nanson_scale[fe_key][bndry_key], *list(internal_vars_surfaces[fe_key][bndry_key][temp_key] for temp_key in self.surface_ordered_dict[fe_key][bndry_key])]
                     # inspect val/the actual value returned by the integrals in the surface kernel
                     val = vmap_fn(*input_collection)
                     fe_vals[bndry_key] = val
