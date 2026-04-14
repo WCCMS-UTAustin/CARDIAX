@@ -20,8 +20,8 @@ class FEConfig:
     def from_dict(cls, params):
 
         # Check mesh info
-        mesh_generator = params.get("mesh_generator", None)
-        mesh_path = params.get("mesh_path", None)
+        mesh_generator = get_dict(params, "generate_mesh")
+        mesh_path = get_Path(params, "mesh_path")
 
         # Check that a mesh is being used or generated
         if mesh_path is None and mesh_generator["name"] is None:
@@ -31,7 +31,7 @@ class FEConfig:
         if mesh_path is None:
             #TODO: Add assertions for mesh generator name and kwargs
             mesh_gen = mesh_generator["name"]
-            mesh_kwargs = get_dict(params["mesh_generator"], "kwargs")
+            mesh_kwargs = get_dict(params["generate_mesh"], "kwargs")
             mesh_generator = {"name": mesh_gen, "kwargs": mesh_kwargs}
         else:
             mesh_generator = None
