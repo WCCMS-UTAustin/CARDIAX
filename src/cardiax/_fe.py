@@ -52,6 +52,8 @@ class Base_FE(ABC):
             pv_ele_type = pv.CellType.QUADRATIC_QUAD
         elif ele_type == 'tetrahedron' or ele_type == 'tetra':
             pv_ele_type = pv.CellType.TETRA
+        elif ele_type == "tetrahedron10" or ele_type == 'tetra10':
+            pv_ele_type = pv.CellType.QUADRATIC_TETRA
         elif ele_type == 'hexahedron' or ele_type == 'hex':
             pv_ele_type = pv.CellType.HEXAHEDRON
         elif ele_type == 'hexahedron27' or ele_type == 'hex27':

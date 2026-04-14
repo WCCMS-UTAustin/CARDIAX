@@ -56,7 +56,11 @@ pde_config:
         value: [0.0, 0.0, 2.0]
         surface_tag: "top"
         static: False
-
+      bc3:
+        type: "Spring"
+        value: 1.
+        surface_tag: "left"
+        static: True
   
 ### Solver object ###
 solver_config:
