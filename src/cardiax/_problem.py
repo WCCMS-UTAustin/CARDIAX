@@ -370,7 +370,7 @@ class Problem(metaclass=MethodWrappingMeta):
             surface_map (callable): function that gives the vector to be contracted with the normal for the weak form. (d-D)
 
         Returns:
-            callable: function that computes the weak form of the surface term
+            callable: function that computes the weak form of the surface term (pre-contracted with the normal vector)
         """
 
         def surface_kernel(cell_sol: ArrayLike, 
