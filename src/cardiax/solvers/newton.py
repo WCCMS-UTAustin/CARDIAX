@@ -10,7 +10,7 @@ from cardiax._solver import Solver_Base
 from cardiax import logger
 
 class Newton_Solver(Solver_Base):
-    """Full Newton Solver where we solve:
+    r"""Full Newton Solver where we solve:
     D(u) \delta u = -r(u)
     At each step, D(u), the jacobian of the residual, r(u), is computed.
     This is done iteratively, linearizing the PDE and upating the solution until convergence
