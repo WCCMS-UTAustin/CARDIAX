@@ -30,7 +30,7 @@ class PDE(Problem):
 
         return first_PK_stress
 
-    def set_params(self, params):
+    def set_params(self, params: dict = {}):
         self.E = params.get('E', 10.)
         self.nu = params.get('nu', 0.3)
         return

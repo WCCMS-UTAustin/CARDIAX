@@ -30,7 +30,7 @@ class PDE(Problem):
 
         P_fn = jax.grad(psi)
 
-        def first_PK_stress(u_grad,w3):
+        def first_PK_stress(u_grad):
             I_d = np.eye(u_grad.shape[0])
             F = u_grad + I_d
             P = P_fn(F)
@@ -38,8 +38,8 @@ class PDE(Problem):
 
         return first_PK_stress
         
-    def params(self, params):
-        self.C10 = params.get('C10')
-        self.C01 = params.get('C01')
-        self.nu = params.get('nu')
+    def set_params(self, params: dict = {}):
+        self.C10 = params.get('C10', 1.0)
+        self.C01 = params.get('C01', 1.0)
+        self.nu = params.get('nu', 0.3)
         return
