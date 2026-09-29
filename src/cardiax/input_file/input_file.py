@@ -168,7 +168,7 @@ class ProblemManager():
                         #TODO: Make easier way to get the shape for surface kernels internal vars
                         normals = self.fes[fe_key].get_surface_normals(neumann_tag)
                         surface_var = np.full_like(normals, np.array(bc["value"]))
-                        int_vars_surf_temp[bc_key] = {"t": surface_var}
+                        int_vars_surf_temp[bc_key] = {"vec": surface_var}
                     else:
                         int_vars_surf_temp[bc_key] = {}
                     continue
