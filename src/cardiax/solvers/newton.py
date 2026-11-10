@@ -40,8 +40,6 @@ class Newton_Solver(Solver_Base):
         V = self.reduceV(V)
         return res_vec, V
 
-    # initial pass of reduced system testing: force user to
-    # manually indicate if there are closed knots in a certain direction
     def solve(self, atol: float=1e-6, max_iter: int=30):
         """The solver imposes Dirichlet B.C. with "row elimination" method.
 

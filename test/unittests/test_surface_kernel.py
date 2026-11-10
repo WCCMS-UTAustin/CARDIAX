@@ -4,7 +4,7 @@ Tests surface kernel, specifically with varying inputs,
 in CARDIAX.
 
 # TODO: batch these tests to check for different element types
-        and gauss quadrature order - this is required to ensure
+        and quadrature order - this is required to ensure
         the method is robust.
 
 """
@@ -58,8 +58,8 @@ class SurfaceKernelTest(unittest.TestCase):
 
         # create mesh and FE object.
         mesh = box_mesh(Nx=3, Ny=3, Nz=3)
-        # use large gauss order to ensure fe.face_nodes != fe.face_quads
-        fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = "hexahedron", gauss_order = 2)
+        # use large order to ensure fe.face_nodes != fe.face_quads
+        fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = "hexahedron", quadrature_order = 2)
 
         # define dirichlet boundary conditions
         def bottom(point):

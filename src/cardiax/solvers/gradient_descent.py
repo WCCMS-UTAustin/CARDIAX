@@ -29,8 +29,6 @@ class Grad_Solver(Solver_Base):
         res_vec = res_vec.at[self.dirichlet_dofs].add(-self.dirichlet_vals, unique_indices=True)
         return np.linalg.norm(res_vec)
 
-    # initial pass of reduced system testing: force user to
-    # manually indicate if there are closed knots in a certain direction
     def solve(self, atol: float=1e-6, max_iter: int=30, early_stop: bool=None):
 
         logger.debug(
