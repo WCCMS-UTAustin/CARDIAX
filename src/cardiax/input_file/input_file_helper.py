@@ -92,7 +92,7 @@ def create_pressure_kernel_static(value):
         F_inv = 1/J * np.array([[F[1, 1] * F[2, 2] - F[1, 2] * F[2, 1], F[0, 2] * F[2, 1] - F[0, 1] * F[2, 2], F[0, 1] * F[1, 2] - F[0, 2] * F[1, 1]],
                                 [F[1, 2] * F[2, 0] - F[1, 0] * F[2, 2], F[0, 0] * F[2, 2] - F[0, 2] * F[2, 0], F[0, 2] * F[1, 0] - F[0, 0] * F[1, 2]],
                                 [F[1, 0] * F[2, 1] - F[1, 1] * F[2, 0], F[0, 1] * F[2, 0] - F[0, 0] * F[2, 1], F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]]])
-        val = value * J * F_inv.T @ normal.reshape(3, 1)
+        val = value * 133.322/(100**2) * J * F_inv.T @ normal.reshape(3, 1)
         return val.reshape(3)
     
     return pressure_kernel
@@ -117,7 +117,7 @@ def create_pressure_kernel_functional():
         F_inv = 1/J * np.array([[F[1, 1] * F[2, 2] - F[1, 2] * F[2, 1], F[0, 2] * F[2, 1] - F[0, 1] * F[2, 2], F[0, 1] * F[1, 2] - F[0, 2] * F[1, 1]],
                                 [F[1, 2] * F[2, 0] - F[1, 0] * F[2, 2], F[0, 0] * F[2, 2] - F[0, 2] * F[2, 0], F[0, 2] * F[1, 0] - F[0, 0] * F[1, 2]],
                                 [F[1, 0] * F[2, 1] - F[1, 1] * F[2, 0], F[0, 1] * F[2, 0] - F[0, 0] * F[2, 1], F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]]]).T
-        val = value * J * F_inv.T @ normal
+        val = value * 133.322 / (100**2) * J * F_inv.T @ normal
         return val
     
     return pressure_kernel
@@ -159,3 +159,30 @@ def create_spring_kernel_functional():
         return value * u
 
     return spring_kernel
+
+def safeguarded(cls):
+
+    """Implements clamped safeguards to prevent Nans from occurring due to a inverting element
+    or a large exponential. This should be used with extreme caution as it may change
+    the trajectory of the Newton solve but has shown to allow solvers to converge without
+    adding extra catches.
+
+    Returns:
+        class: Safeguarded class that overwrites the computation of J and exponential evaluation.
+    """
+
+    class Safeguarded(cls):
+        def set_params(self, params, safeguards=None):
+            super().set_params(params)
+            sg = safeguards or {}
+            self.J_min = sg.get('J_min', 1e-1)
+            self.exp_max = sg.get('exp_max', 20.)
+
+        def evaluate_J(self, F):
+            return np.maximum(super().evaluate_J(F), self.J_min)
+
+        def evaluate_exp(self, x):
+            return super().evaluate_exp(np.minimum(x, self.exp_max))
+
+    Safeguarded.__name__ = f"_{cls.__name__}"
+    return Safeguarded

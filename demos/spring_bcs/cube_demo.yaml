@@ -20,7 +20,7 @@ fe_config:
 
   kwargs:
     ele_type: "hexahedron"
-    gauss_order: 1
+    quadrature_order: 2
     vec: 3
     dim: 3
 
@@ -32,7 +32,7 @@ fe_config:
 pde_config:
 
   pde_info:
-    pde_class: "Hyperelasticity"
+    pde_class: "Isotropic"
     pde_type: "NeoHookean" # Defines the get_tensor_map
     constants:
       E: 10.
@@ -51,12 +51,12 @@ pde_config:
 
   surface_maps_info:
     u:
-      bc2:
+      bc1:
         type: "Neumann"
-        value: [0.0, 0.0, 2.0]
+        value: [0.0, 0.0, 1.0]
         surface_tag: "top"
         static: False
-      bc3:
+      bc2:
         type: "Spring"
         value: 1.
         surface_tag: "left"
@@ -65,6 +65,7 @@ pde_config:
 ### Solver object ###
 solver_config:
   name: "Newton"
+  precond: "jacobi"
   kwargs:
     max_iter: 20
     atol: 1.0e-6
