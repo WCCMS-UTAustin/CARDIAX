@@ -14,7 +14,7 @@ name = "cardiax"
 version = "0.1.0"
 description = "Cardiax: A Python package for GPU enabled cardiac simulations"
 readme = "README.md"
-requires-python = ">=3.9, <3.14" # Needed for TACC, default 3.9.7
+requires-python = ">=3.9" # Needed for TACC, default 3.9.7
 license = { text = "GPL-3.0-only" }
 
 authors = [
@@ -35,7 +35,6 @@ dependencies = [
     'pyyaml>=6.0', # PyYAML is used for reading configuration files
     'pygmsh>=7.0', # pygmsh is used for mesh generation
     'pyvista>=0.43', # PyVista is used for 3D visualization
-    'vtk < 9.6' # VTK is used for 3D visualization
 ]
 
 [project.optional-dependencies]
@@ -46,7 +45,14 @@ cuda13-local = ["jax[cuda13-local]>=0.4"]
 test = [
    "ruff", # Formatting: https://docs.astral.sh/ruff/rules/#pydocstyle-d
    "pytest", # Testing suite
-   "pytest-cov" # Coverage reports
+   "pytest-cov", # Coverage reports
+   "sympy==1.14.0" # Tests against analytical formulas
+]
+
+# Performance benchmarks; see benchmarks/README.md
+bench = [
+    "asv>=0.6.6", # airspeed velocity: benchmark running and result tracking
+    "scipy>=1.10" # Matches boundary condition data onto mesh nodes
 ]
 
 docs = [

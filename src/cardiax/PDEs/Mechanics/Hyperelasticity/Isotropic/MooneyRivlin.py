@@ -16,7 +16,7 @@ class PDE(Problem):
         def psi(F):
             kappa = (4. * (1 + self.nu) * (self.C10 + self.C01)) / (3. * (1. - 2. * self.nu))
 
-            J = np.linalg.det(F)
+            J = self.evaluate_J(F)
             C = F.T @ F
             I1 = np.trace(C) 
             Jinv1 = 1/(np.cbrt(J**2))
@@ -30,7 +30,7 @@ class PDE(Problem):
 
         P_fn = jax.grad(psi)
 
-        def first_PK_stress(u_grad):
+        def first_PK_stress(u_grad,w3):
             I_d = np.eye(u_grad.shape[0])
             F = u_grad + I_d
             P = P_fn(F)
@@ -38,8 +38,8 @@ class PDE(Problem):
 
         return first_PK_stress
         
-    def set_params(self, params: dict = {}):
-        self.C10 = params.get('C10', 1.0)
-        self.C01 = params.get('C01', 1.0)
-        self.nu = params.get('nu', 0.3)
+    def params(self, params):
+        self.C10 = params.get('C10')
+        self.C01 = params.get('C01')
+        self.nu = params.get('nu')
         return

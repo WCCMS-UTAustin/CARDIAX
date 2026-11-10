@@ -17,9 +17,10 @@ from .config import FEConfig, get_dict
 from dataclasses import asdict
 
 import cardiax
+from cardiax import logger
 from cardiax import FiniteElement, Problem, Newton_Solver
 from cardiax._solver import Solver_Base
-from cardiax.input_file.input_file_helper import add_surface_kernels
+from cardiax.input_file.input_file_helper import add_surface_kernels, safeguarded
 
 class ProblemManager():
     """This class is responsible for loading the input file and generating the 
@@ -71,6 +72,11 @@ class ProblemManager():
         else:
             meshgen = getattr(cardiax, config.mesh_generator["name"])
             mesh = meshgen(**config.mesh_generator["kwargs"])
+
+        # Patch API update regarding quadrature
+        if "gauss_order" in config.kwargs:
+            logger.warning("Key 'gauss_order' is deprecated. Use 'quadrature_order' instead.")
+            config.kwargs["quadrature_order"] = config.kwargs.pop("gauss_order")
 
         # create and save FiniteElement object
         fes = {config.var: FiniteElement(mesh, **config.kwargs)}
@@ -168,7 +174,7 @@ class ProblemManager():
                         #TODO: Make easier way to get the shape for surface kernels internal vars
                         normals = self.fes[fe_key].get_surface_normals(neumann_tag)
                         surface_var = np.full_like(normals, np.array(bc["value"]))
-                        int_vars_surf_temp[bc_key] = {"vec": surface_var}
+                        int_vars_surf_temp[bc_key] = {"t": surface_var}
                     else:
                         int_vars_surf_temp[bc_key] = {}
                     continue
@@ -267,6 +273,11 @@ class ProblemManager():
         else:
             raise ValueError("PDE type not supported. Please choose between", pde_dirs)
 
+        # Optionally clamp J and exponential arguments to avoid NaNs
+        use_safeguards = "safeguards" in config.pde_info
+        if use_safeguards:
+            Problem_class = safeguarded(Problem_class)
+
         # Create dirichlet_bc_info and surface_maps dictionaries
         self.dirichlet_bc_info = self.dirichlet_bc_loader(dirichlet_bc_params=config.dirichlet_bc_info)
         self.location_fns, self.surface_kernels, self.internal_vars_surfaces = self.surface_maps_loader(surface_maps_params=config.surface_maps_info)
@@ -288,13 +299,20 @@ class ProblemManager():
                     elif isinstance(ivs[fe_key][iv]["value"], float):
                         data = onp.full((problem.fes[fe_key].cells.shape[0], problem.fes[fe_key].num_quads, ivs[fe_key][iv]["vec"]), ivs[fe_key][iv]["value"]).astype(np.float32)
                         int_vars_temp[iv] = data
+                    elif isinstance(ivs[fe_key][iv]["value"], list):
+                        vec = onp.array(ivs[fe_key][iv]["value"])
+                        data = onp.full((problem.fes[fe_key].cells.shape[0], problem.fes[fe_key].num_quads, len(vec)), vec).astype(np.float32)
+                        int_vars_temp[iv] = data
                     else:
                         raise ValueError("Internal variable value must be 'mesh' or a float.")
                 internal_vars_temp[fe_key] = int_vars_temp
             self.internal_vars = internal_vars_temp
         except: pass #TODO Find error here
 
-        problem.set_params(pde_constants)
+        if use_safeguards:
+            problem.set_params(pde_constants, safeguards=config.pde_info["safeguards"])
+        else:
+            problem.set_params(pde_constants)
         problem.set_internal_vars(self.internal_vars)
         problem.set_internal_vars_surfaces(self.internal_vars_surfaces)
         return problem
@@ -310,7 +328,8 @@ class ProblemManager():
         """
 
         if config.name == "Newton":
-            solver = Newton_Solver(self.problem, np.zeros(self.problem.num_total_dofs_all_vars))
+            solver = Newton_Solver(self.problem, np.zeros(self.problem.num_total_dofs_all_vars), 
+                                   precond=config.precond)
         self.solver_kwargs = config.kwargs
         return solver
 

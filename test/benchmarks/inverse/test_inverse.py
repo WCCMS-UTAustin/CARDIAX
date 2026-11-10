@@ -52,7 +52,8 @@ class Test(unittest.TestCase):
         Lx, Ly, Lz = 1., 1., 1.
         ele_type = 'hexahedron'
         mesh = box_mesh(Nx=10, Ny=10, Nz=10, Lx=Lx, Ly=Ly, Lz=Lz)
-        fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = ele_type, gauss_order = 1)
+        # Need order 2 to assemble load accurately
+        fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = ele_type, quadrature_order = 2)
 
         def left(point):
             return np.isclose(point[0], 0., atol=1e-5)

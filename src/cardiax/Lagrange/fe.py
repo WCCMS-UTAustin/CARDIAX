@@ -5,8 +5,9 @@ import time
 from cardiax._basis import get_face_shape_vals_and_grads, get_shape_vals_and_grads
 from cardiax._fe import Base_FE
 from cardiax import logger
-from meshio import Mesh
+from pyvista import UnstructuredGrid
 from jaxtyping import ArrayLike
+from typing import Union
 import jax
 
 class FiniteElement(Base_FE):
@@ -14,14 +15,14 @@ class FiniteElement(Base_FE):
     over the mesh that is used as input.
 
     Args:
-        mesh (meshio.Mesh): The mesh object containing the points and cells
+        mesh (pyvista.UnstructuredGrid): The mesh object containing the points and cells
         vec (int): Number of components of the solution vector
         dim (int): Dimension of the problem, e.g. 3 for 3D
         ele_type (str): Type of the element, e.g. 'hexahedron'
-        gauss_order (int): Order of the Gauss quadrature rule to use for integration
+        quadrature_order (int): order of polynomial guaranteed to be integrated exactly by the quadrature rule
         
     Attributes:
-        mesh (meshio.Mesh): The mesh object containing the points and cells
+        mesh (pyvista.UnstructuredGrid): The mesh object containing the points and cells
         points (np.ndarray): coordinates of the mesh points
         nodes (np.ndarray): same as points, used for boundary conditions
         cells (np.ndarray): connectivity of the mesh cells
@@ -30,33 +31,34 @@ class FiniteElement(Base_FE):
         num_total_dofs (int): total number of degrees of freedom (nodes * vec)
         shape_vals (np.ndarray): shape function values at quadrature points
         shape_grads_ref (np.ndarray): gradients of the shape functions in reference coordinates
-        quad_weights (np.ndarray): weights for the Gauss quadrature rule
+        quad_weights (np.ndarray): weights for the quadrature rule
         face_shape_vals (np.ndarray): shape function values on the faces of the elements
         face_shape_grads_ref (np.ndarray): gradients of the shape functions on the faces in reference coordinates
-        face_quad_weights (np.ndarray): weights for the Gauss quadrature rule on the faces
+        face_quad_weights (np.ndarray): weights for the quadrature rule on the faces
         face_normals (np.ndarray): normals of the faces of the elements
         face_inds (np.ndarray): indices of the faces in the mesh
         num_quads (int): number of quadrature points    
     
     """
 
-    def __init__(self, mesh: Mesh, vec: int, dim: int, ele_type: str, gauss_order: int):
+    def __init__(self, mesh: UnstructuredGrid, vec: int, dim: int, ele_type: str, quadrature_order: int, gauss_order: Union[None, int]=None):
         """_summary_
 
         Args:
-            mesh (Mesh): The mesh object containing the points and cells
+            mesh (pyvista.UnstructuredGrid): The mesh object containing the points and cells
             vec (int): Number of components of the solution vector
             dim (int): Dimension of the problem, e.g. 3 for 3D
             ele_type (str): Type of the element, e.g. 'hexahedron'
-            gauss_order (int): Order of the Gauss quadrature rule to use for integration
+            quadrature_order (int): order of polynomial guaranteed to be integrated exactly by the quadrature rule
         """
+        if gauss_order is not None:
+            logger.warning("Key 'gauss_order' is deprecated. Use 'quadrature_order' instead.")
+            quadrature_order = gauss_order
 
         self.mesh = mesh
-        super().__init__(vec, dim, ele_type, gauss_order)
+        super().__init__(vec, dim, ele_type, quadrature_order)
 
         self.points = self.mesh.points[:, :self.dim]
-        # not sure if this is accurate nomenclature-wise, but need to
-        # access different objects to apply boundary conditions for iga and FE
         self.nodes = self.mesh.points[:, :self.dim]
         self.cells = self.mesh.cells_dict[self.pv_ele_type].astype(np.int32)
         self.num_cells = len(self.cells)
@@ -66,9 +68,9 @@ class FiniteElement(Base_FE):
         start = time.time()
         logger.debug("Computing shape function values, gradients, etc.")
 
-        self.shape_vals, self.shape_grads_ref, self.quad_weights = get_shape_vals_and_grads(self.ele_type, self.dim * self.gauss_order)
+        self.shape_vals, self.shape_grads_ref, self.quad_weights = get_shape_vals_and_grads(self.ele_type, self.quadrature_order)
         self.face_shape_vals, self.face_shape_grads_ref, self.face_quad_weights, self.face_normals, self.face_inds \
-        = get_face_shape_vals_and_grads(self.ele_type, self.dim * self.gauss_order)
+        = get_face_shape_vals_and_grads(self.ele_type, self.quadrature_order)
         self.num_quads = self.shape_vals.shape[0]
         self.num_nodes = self.shape_vals.shape[1]
         self.num_faces = self.face_shape_vals.shape[0]

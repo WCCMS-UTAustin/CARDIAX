@@ -2,8 +2,7 @@
 """
 _basis.py is used for handling the basis functions and their properties.
 The basis elements originate from the FEniCS basix library, with modification
-that were done for JAX-FEM that we have kept. May want to see why it diverges from
-basix at some point to see if we can more easily use the full library.
+that were done for JAX-FEM that we have kept.
 """
 
 import basix
@@ -11,16 +10,6 @@ import numpy as onp
 
 from cardiax import logger
 
-# Will be turning this into a class, and potentially creating a class instance and directly
-# importing functions from the class, to allow for the re-use of shape function evaluation code. 
-# This should allow for more flexibility with element type as well if desired.
-#
-# NOTE: this ^ might not be the best idea, I really am looking for a solution that allows me
-#       to append to a dictionary...
-#
-# could also maybe partial get_face_shape_vals_and_grads or whatever other functions need to be used...
-
-# maybe turn this into an abstract class?
 class BasisFns:
 
     def __init__(self):
@@ -34,16 +23,16 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.hexahedron,
                 'basix_face_ele': basix.CellType.quadrilateral,
-                'gauss_order': 3,
+                'quadrature_order': 1,
                 'degree': 1,
-                'warning': None},
+            },
             'hexahedron27': {
                 're_order': [0, 1, 3, 2, 4, 5, 7, 6, 8, 11, 13, 9, 16, 18, 19,
                     17, 10, 12, 15, 14, 22, 23, 21, 24, 20, 25, 26],
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.hexahedron,
                 'basix_face_ele': basix.CellType.quadrilateral,
-                'gauss_order': 6, # 6x6x6, full integration
+                'quadrature_order': 2,
                 'degree': 2 
             },
             'hexahedron20':
@@ -52,7 +41,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.serendipity,
                 'basix_ele': basix.CellType.hexahedron,
                 'basix_face_ele': basix.CellType.quadrilateral,
-                'gauss_order': 2, # 6x6x6, full integration
+                'quadrature_order': 2,
                 'degree': 2},
             'hexahedron64': {
                 #TODO: this re_order variable is not correct, we need to see the algorithm basix uses to order dofs and the algorithm meshio uses
@@ -65,7 +54,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.hexahedron,
                 'basix_face_ele': basix.CellType.quadrilateral,
-                'gauss_order': 9,
+                'quadrature_order': 3,
                 'degree': 3,
                 'warning': "Warning: 64-node hexahedron is currently in development and is not guaranteed to be correct."
             },
@@ -75,7 +64,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.tetrahedron,
                 'basix_face_ele': basix.CellType.triangle,
-                'gauss_order': 0, # 1, full integration
+                'quadrature_order': 1,
                 'degree': 1
             },
             'tetra10':
@@ -84,7 +73,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.tetrahedron,
                 'basix_face_ele': basix.CellType.triangle,
-                'gauss_order': 2, # 4, full integration
+                'quadrature_order': 2,
                 'degree': 2
             },
             'quad': {
@@ -92,7 +81,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.quadrilateral,
                 'basix_face_ele': basix.CellType.interval,
-                'gauss_order': 2,
+                'quadrature_order': 1,
                 'degree': 1
             },
             'quad8': {
@@ -100,7 +89,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.serendipity,
                 'basix_ele': basix.CellType.quadrilateral,
                 'basix_face_ele': basix.CellType.interval,
-                'gauss_order': 2,
+                'quadrature_order': 2,
                 'degree': 2
             },
             'quad9': {
@@ -108,7 +97,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.quadrilateral,
                 'basix_face_ele': basix.CellType.interval,
-                'gauss_order': 2,
+                'quadrature_order': 2,
                 'degree': 2
             },
             'triangle': {
@@ -116,7 +105,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.triangle,
                 'basix_face_ele': basix.CellType.interval,
-                'gauss_order': 0, # 1, full integration
+                'quadrature_order': 1,
                 'degree': 1
             },
             'triangle6': {
@@ -124,7 +113,7 @@ class BasisFns:
                 'element_family': basix.ElementFamily.P,
                 'basix_ele': basix.CellType.triangle,
                 'basix_face_ele': basix.CellType.interval,
-                'gauss_order': 2, # 3, full integration
+                'quadrature_order': 2,
                 'degree': 2
             }
         }
@@ -153,7 +142,7 @@ class BasisFns:
         re_order = element_info['re_order']
         basix_ele = element_info['basix_ele']
         basix_face_ele = element_info['basix_face_ele']
-        gauss_order = element_info['gauss_order']
+        quadrature_order = element_info['quadrature_order']
         degree = element_info['degree']
         try:
             warning_msg = element_info['warning']
@@ -162,7 +151,7 @@ class BasisFns:
         except:
             pass
 
-        return element_family, basix_ele, basix_face_ele, gauss_order, degree, re_order
+        return element_family, basix_ele, basix_face_ele, quadrature_order, degree, re_order
 
     def reorder_inds(self, inds, re_order):
         """Add documentation
@@ -181,7 +170,7 @@ class BasisFns:
         new_inds = onp.array(new_inds).reshape(inds.shape)
         return new_inds
 
-    def get_shape_vals_and_grads(self, ele_type, gauss_order=None):
+    def get_shape_vals_and_grads(self, ele_type, quadrature_order=None):
         """ Returns shape function values, gradients, and weights.
 
         Calls :py:meth:`jax_fem.basis.get_elements` to initialize data structures
@@ -198,12 +187,12 @@ class BasisFns:
         weights: ndarray
             (num_quads,)
         """
-        element_family, basix_ele, basix_face_ele, gauss_order_default, degree, re_order = self.get_elements(ele_type)
+        element_family, basix_ele, basix_face_ele, quadrature_order_default, degree, re_order = self.get_elements(ele_type)
 
-        if gauss_order is None:
-            gauss_order = gauss_order_default
+        if quadrature_order is None:
+            quadrature_order = quadrature_order_default
 
-        quad_points, weights = basix.make_quadrature(basix_ele, gauss_order)
+        quad_points, weights = basix.make_quadrature(basix_ele, quadrature_order)
         if degree >2:
             element = basix.create_element(element_family, basix_ele, degree, lagrange_variant = basix.LagrangeVariant.equispaced)
         else:
@@ -215,7 +204,7 @@ class BasisFns:
         return shape_values, shape_grads_ref, weights
 
 
-    def get_face_shape_vals_and_grads(self, ele_type, gauss_order=None, rule=None):
+    def get_face_shape_vals_and_grads(self, ele_type, quadrature_order=None, rule=None):
         """TODO: Returns shape function values, gradients, weights, 
         normal vectors, and indices on/of each face of a given FE.
 
@@ -244,25 +233,27 @@ class BasisFns:
         # TODO: Returns shape function values, gradients, weights, 
         # normal vectors, and indices on/of each face of a given FE.
 
-        element_family, basix_ele, basix_face_ele, gauss_order_default, degree, re_order = self.get_elements(ele_type)
+        element_family, basix_ele, basix_face_ele, quadrature_order_default, degree, re_order = self.get_elements(ele_type)
 
-        if gauss_order is None:
-            gauss_order = gauss_order_default
+        if quadrature_order is None:
+            quadrature_order = quadrature_order_default
 
         # TODO: Check if this is correct.
-        # We should provide freedom for seperate gauss_order for volume integral and surface integral
-        # Currently, they're using the same gauss_order!
+        # We should provide freedom for seperate quadrature_order for volume integral and surface integral
+        # Currently, they're using the same quadrature_order!
         # breakpoint()
         if rule is None:
-            points, weights = basix.make_quadrature(basix_face_ele, gauss_order)
+            points, weights = basix.make_quadrature(basix_face_ele, quadrature_order)
         else:
             # list of rules, from the basix documentation:
+            # (Note that there are some rules specific to certain elements,
+            # and some of these are not implemented at high orders)
             # 0: default
             # 1: gauss_jacobi
             # 2: gll
             # 3: xiao_gimbutas
             # https://docs.fenicsproject.org/basix/main/python/_autosummary/basix.html#basix.QuadratureType
-            points, weights = basix.make_quadrature(basix_face_ele, gauss_order, rule)
+            points, weights = basix.make_quadrature(basix_face_ele, quadrature_order, rule)
         
         # might need to debug this, some values seem off for the GLL rule... (rule=2)
         map_degree = 1
@@ -310,12 +301,6 @@ class BasisFns:
         # breakpoint()
         return face_shape_vals, face_shape_grads_ref, face_weights, face_normals, face_inds
 
-    # functionality for contact: get ALL nodes on a specific element face.
-    # Accessing only the vertices on each element face, as done in get_face_shape_vals_and_grads,
-    # is enough to determine facet normals, but we need the local indices of the nodes on each face
-    # in order to properly assign gauss weights to them.
-    # TODO: create a unit test that checks if the quadrature weights associated with these nodes
-    #       are actually assigned correctly!!!
     def get_face_node_inds(self, ele_type, deg):
         """ returns the nodes on each face of a specific element.
 
@@ -325,7 +310,7 @@ class BasisFns:
         """
 
         # get the basix element from the element type that is prescribed in CARDIAX
-        element_family, basix_ele, basix_face_ele, gauss_order_default, degree, re_order = self.get_elements(ele_type)
+        _, basix_ele, _, _, _, re_order = self.get_elements(ele_type)
 
         # breakpoint()
         if deg > 2:
@@ -386,7 +371,7 @@ get_elements = basis_fn_class.get_elements
 #                 102, 108, 110, 112, 114, 120, 111]
 #     basix_ele = basix.CellType.hexahedron
 #     basix_face_ele = basix.CellType.quadrilateral
-#     gauss_order = 12
+#     quadrature_order = 12
 #     degree = 4
 # elif ele_type == 'hexahedron216':
 #     print(f"Warning: 216-node hexahedron is currently in development and is not guaranteed to be correct.")
@@ -413,5 +398,5 @@ get_elements = basis_fn_class.get_elements
 #                 173, 174, 178, 177, 189, 190, 194, 193]
 #     basix_ele = basix.CellType.hexahedron
 #     basix_face_ele = basix.CellType.quadrilateral
-#     gauss_order = 15
+#     quadrature_order = 15
 #     degree = 5

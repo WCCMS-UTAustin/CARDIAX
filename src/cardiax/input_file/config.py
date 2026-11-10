@@ -20,7 +20,7 @@ class FEConfig:
     def from_dict(cls, params):
 
         # Check mesh info
-        mesh_generator = get_dict(params, "mesh_generator")
+        mesh_generator = get_dict(params, "generate_mesh")
         mesh_path = get_Path(params, "mesh_path")
 
         # Check that a mesh is being used or generated
@@ -31,7 +31,7 @@ class FEConfig:
         if mesh_path is None:
             #TODO: Add assertions for mesh generator name and kwargs
             mesh_gen = mesh_generator["name"]
-            mesh_kwargs = get_dict(params["mesh_generator"], "kwargs")
+            mesh_kwargs = get_dict(params["generate_mesh"], "kwargs")
             mesh_generator = {"name": mesh_gen, "kwargs": mesh_kwargs}
         else:
             mesh_generator = None
@@ -75,6 +75,7 @@ class PDEConfig:
 class SolverConfig:
 
     name: str
+    precond: str
     kwargs: dict
 
     @classmethod
@@ -83,10 +84,12 @@ class SolverConfig:
         # Unpack nested dicts
         #TODO: Add assertions for these dicts
         solver_name = params["name"]
+        solver_precond = params["precond"]
         solver_kwargs = params["kwargs"]
 
         return cls(
             name = solver_name,
+            precond = solver_precond,
             kwargs = solver_kwargs
         )
 

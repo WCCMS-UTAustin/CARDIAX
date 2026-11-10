@@ -1,5 +1,5 @@
 
-from typing import Callable
+from typing import Callable, Union
 import numpy as onp
 import jax
 import jax.numpy as np
@@ -9,14 +9,14 @@ from jaxtyping import ArrayLike
 
 from abc import ABC, abstractmethod
 
+from cardiax._boundary import NodeMask
+
 @dataclass
 class Base_FE(ABC):
     """
-    Base class to be used for FE objects. Current implementation is made to
-    work with traditional Lagrange FE, but hopefully, can be extended to other types.
-    ie future work on potentially Bezier extraction, IGA, or others...
-    The ABC framework insure consistency when initializing the
-    different classes because they will be shared 
+    Base class to be used for FE objects.
+    The ABC framework insure consistency when initializing
+    future classes because they will be shared 
     with Problem.
 
     Attributes
@@ -27,14 +27,14 @@ class Base_FE(ABC):
         Spatial dimension (e.g., 2 for 2D problems, 3 for 3D problems).
     ele_type : str
         Element type (e.g., 'hexahedron', 'quad').
-    gauss_order : int
-        Order of the Gauss quadrature rule used for numerical integration.    
+    quadrature_order : int
+        order of polynomial guaranteed to be integrated exactly by the quadrature rule
     """
 
     vec: int
     dim: int
     ele_type: str
-    gauss_order: int
+    quadrature_order: int
 
     def __post_init__(self):
         self.pv_ele_type = self.meshio_to_pyvista_ele(self.ele_type)
@@ -282,7 +282,11 @@ class Base_FE(ABC):
             location_fns, vecs, value_fns = dirichlet_bc_info
             assert len(location_fns) == len(value_fns) and len(value_fns) == len(vecs)
             for i, location_fn in enumerate(location_fns):
-                node_inds = onp.argwhere(jax.vmap(location_fn)(self.nodes)).reshape(-1)
+                if isinstance(location_fn, NodeMask):
+                    location_fn.check_compatible(self.nodes.shape[0])
+                    node_inds = location_fn.node_inds
+                else:
+                    node_inds = onp.argwhere(jax.vmap(location_fn)(self.nodes)).reshape(-1)
                 vec_inds = onp.ones_like(node_inds, dtype=onp.int32) * vecs[i]
                 values = jax.vmap(value_fns[i])(self.nodes[node_inds].reshape(-1, self.dim)).reshape(-1)
                 node_inds_list.append(node_inds)
@@ -290,24 +294,58 @@ class Base_FE(ABC):
                 vals_list.append(values)
         return node_inds_list, vec_inds_list, vals_list
     
+    def tag_nodes(self, location_fn: Union[Callable, onp.ndarray, np.ndarray]) -> NodeMask:
+        """Tag the nodes where a coordinate-based location function is True OR
+           with a pre-existing boolean mask.
+
+        Use on a reference mesh to get a NodeMask that can then be reused on
+        deformed meshes, where the location function would no longer match.
+        
+        Keeping this in one function allows for the user to re-use the same
+        function for both methods, but might be a bit more fragile. All
+        Callables are assumed to be location functions.
+        
+        """
+
+        if isinstance(location_fn, Callable):
+            return NodeMask.from_location_fn(self, location_fn)
+        elif isinstance(location_fn, onp.ndarray) or isinstance(location_fn, np.ndarray):
+            mask = onp.asarray(location_fn)
+            if mask.dtype != bool:
+                raise TypeError(f"tag_nodes requires a boolean array (e.g. mesh.point_data['top']), "
+                                f"got an array of dtype {mask.dtype}. Convert it explicitly "
+                                "(e.g. arr > 0.5) if it is meant to be a mask.")
+            if mask.shape != (self.points.shape[0],):
+                raise ValueError(f"tag_nodes requires a 1D boolean array with one entry per node "
+                                 f"({self.points.shape[0]}), got shape {mask.shape}.")
+            return NodeMask(mask)
+        else:
+            raise TypeError(f"location_fn must be a Callable or a boolean array, got {type(location_fn)}.")
+
     def get_boundary_conditions_inds(self, location_fn):
         """Given location functions, compute which faces satisfy the condition.
 
         Parameters
         ----------
-        location_fns : List[Callable]
+        location_fn : Callable or NodeMask
             Callable: a location function that inputs a point (ndarray) and returns if the point satisfies the location condition
                       e.g., lambda x: np.isclose(x[0], 0.)
-                      If this location function takes 2 arguments, then the first is point and the second is index.
-                      e.g., lambda x, ind: np.isclose(x[0], 0.) & np.isin(ind, np.array([1, 3, 10]))
+                      A face is selected if all of its vertices satisfy the condition.
+            NodeMask: an explicit set of tagged nodes (see ``tag_nodes``). A face is
+                      selected if all of its vertices are tagged.
 
         Returns
         -------
-        boundary_inds_list : List[onp.ndarray]
+        boundary_inds : onp.ndarray
             (num_selected_faces, 2)
-            boundary_inds_list[k][i, 0] returns the global cell index of the ith selected face of boundary subset k
-            boundary_inds_list[k][i, 1] returns the local face index of the ith selected face of boundary subset k
+            boundary_inds[i, 0] returns the global cell index of the ith selected face
+            boundary_inds[i, 1] returns the local face index of the ith selected face
         """
+        if isinstance(location_fn, NodeMask):
+            location_fn.check_compatible(self.points.shape[0])
+            cell_face_nodes = onp.take(self.cells, self.face_inds, axis=1)  # (num_cells, num_faces, num_face_vertices)
+            return onp.argwhere(location_fn.mask[cell_face_nodes].all(axis=-1))  # (num_selected_faces, 2)
+
         cell_points = onp.take(self.points, self.cells, axis=0)  # (num_cells, num_nodes, dim)
         cell_face_points = onp.take(cell_points, self.face_inds, axis=1)  # (num_cells, num_faces, num_face_vertices, dim)
         # cell_face_inds = onp.take(self.cells, self.face_inds, axis=1) # (num_cells, num_faces, num_face_vertices)

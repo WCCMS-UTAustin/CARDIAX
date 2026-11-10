@@ -12,6 +12,7 @@ import inspect
 from cardiax.common import timeit
 from cardiax import FiniteElement
 from cardiax import logger
+from cardiax._boundary import NodeMask
 from cardiax._internal import MethodWrappingMeta
 
 """ WARNING!
@@ -34,7 +35,7 @@ class Problem(metaclass=MethodWrappingMeta):
     Args:
         fes (FiniteElement): Finite element object or list of finite element objects that define the problem.
         dirichlet_bc_info (Optional[Dict[Union[List[Callable], List[int], List[Callable]]]]): List of Dirichlet boundary condition information.
-        location_fns (Optional[List[Callable]]): List of functions that define the locations for boundary conditions.
+        location_fns (Optional[dict]): Nested dict {fe_key: {name: Callable | NodeMask}} defining the boundary locations. A NodeMask selects nodes explicitly (see FiniteElement.tag_nodes).
         fe_bindings (Optional[List[List[int]]]): List of finite element bindings, where each binding is a list of indices of finite elements that share degrees of freedom.
                                                 useful for volumetric/deviatoric split with reduced integration
 
@@ -42,7 +43,7 @@ class Problem(metaclass=MethodWrappingMeta):
 
     fes: dict[str, FiniteElement]
     dirichlet_bc_info: Optional[dict[Union[list[Callable], list[int], list[Callable]]]] = None
-    location_fns: Optional[dict[str, dict[str, Callable]]] = None
+    location_fns: Optional[dict[str, dict[str, Union[Callable, NodeMask]]]] = None
     fe_bindings: Optional[dict[str, int]] = None
     _allowed_to_set: bool = field(default=True, init=False, repr=False)
 
@@ -86,7 +87,7 @@ class Problem(metaclass=MethodWrappingMeta):
         self.vec = {fe_key: self.fes[fe_key].vec for fe_key in self.fes}
         self.dim = {fe_key: self.fes[fe_key].dim for fe_key in self.fes}
         self.ele_type = {fe_key: self.fes[fe_key].ele_type for fe_key in self.fes}
-        self.gauss_order = {fe_key: self.fes[fe_key].gauss_order for fe_key in self.fes}
+        self.quadrature_order = {fe_key: self.fes[fe_key].quadrature_order for fe_key in self.fes}
         self.support_list = {fe_key: self.fes[fe_key].get_cell_basis_supports() for fe_key in self.fes}
         self.num_cells = {fe_key: self.fes[fe_key].num_cells for fe_key in self.fes}
         return
@@ -165,6 +166,10 @@ class Problem(metaclass=MethodWrappingMeta):
                 int_vars_surf = {}
                 for key in self.location_fns[fe_key]:
                     boundary_inds = self.fes[fe_key].get_boundary_conditions_inds(self.location_fns[fe_key][key])
+                    if len(boundary_inds) == 0:
+                        logger.warning(f"Location '{key}' for '{fe_key}' selected zero faces. "
+                                       "If the mesh is deformed, tag the boundary on the reference mesh with "
+                                       "fe.tag_nodes(location_fn) and pass the NodeMask instead.")
                     int_vars_surf[key] = {}
                     temp_boundary_inds[key] = boundary_inds
                 self.boundary_inds_dict[fe_key] = temp_boundary_inds
@@ -270,6 +275,14 @@ class Problem(metaclass=MethodWrappingMeta):
         try:
             self.bc_inds = onp.hstack([x.flatten() for x in self.bc_inds.values()], dtype=onp.int32)
             self.bc_vals = onp.hstack([x.flatten() for x in self.bc_vals.values()])
+            # Nodes shared by several marked regions (edges/corners of a box) are
+            # listed once per region. The solver scatters with unique_indices=True,
+            # so keep one entry per dof; the last one listed wins, matching what
+            # the scatter-set did before.
+            _, last = onp.unique(self.bc_inds[::-1], return_index=True)
+            keep = onp.sort(len(self.bc_inds) - 1 - last)
+            self.bc_inds = self.bc_inds[keep]
+            self.bc_vals = self.bc_vals[keep]
         except AttributeError:
             self.bc_inds = np.array([self.num_total_dofs_all_vars + 1])
             self.bc_vals = np.array([0.])
@@ -465,9 +478,22 @@ class Problem(metaclass=MethodWrappingMeta):
             f"{self.internal_vars.keys()} vs. {internal_vars.keys()}"
         
         int_var_temp = {}
+        ordered_temp = {}
         for fe_key in self.internal_vars:
             int_var = {}
-            
+
+            # Keys are passed to the mass/tensor maps positionally. If they match the map
+            # argument names, use the signature ordering; otherwise use the dict insertion order.
+            var_keys = list(internal_vars[fe_key].keys())
+            if self.param_names is not None:
+                param_names = self.param_names[fe_key]
+                assert len(var_keys) == len(param_names), \
+                f"Mass/tensor maps for finite element field {fe_key} take {len(param_names)} " \
+                f"internal variables {param_names}, but {len(var_keys)} were given: {var_keys}"
+                if set(var_keys) == set(param_names):
+                    var_keys = list(param_names)
+            ordered_temp[fe_key] = var_keys
+
             try:
                 for var_key in internal_vars[fe_key]:
                     if len(internal_vars[fe_key][var_key]) == 0:
@@ -503,8 +529,9 @@ class Problem(metaclass=MethodWrappingMeta):
             except Exception as e:
                 raise ValueError(f"Error processing internal variable {var_key} for finite element field {fe_key}: {e}")
             int_var_temp[fe_key] = int_var
-        
+
         self.internal_vars = int_var_temp
+        self.ordered_dict = ordered_temp
         return
     
     def set_internal_vars_surfaces(self, 
@@ -545,6 +572,7 @@ class Problem(metaclass=MethodWrappingMeta):
         var_expected_shape_fn = self._get_var_expected_shape_fn(var_location)
 
         int_var_surf_temp = {}
+        surface_ordered_temp = {}
         for fe_key in self.internal_vars_surfaces:
 
             # check that the surface_map keys are correct for each FE object
@@ -559,8 +587,21 @@ class Problem(metaclass=MethodWrappingMeta):
             # a bit confusing, but we need *all* nodes, and only need *face* quads.
 
             int_var_surf_fe = {}
+            surface_ordered_fe = {}
             for surf_fn in self.internal_vars_surfaces[fe_key]:
                 int_var_surf_fe_fn = {}
+
+                # Keys are passed to the surface_map positionally. If they match the surface_map
+                # argument names, use the signature ordering; otherwise use the dict insertion order.
+                var_keys = list(internal_vars_surfaces[fe_key][surf_fn].keys())
+                if self.surface_param_names is not None:
+                    param_names = self.surface_param_names[fe_key][surf_fn]
+                    assert len(var_keys) == len(param_names), \
+                    f"Surface map for {surf_fn} in finite element field {fe_key} takes {len(param_names)} " \
+                    f"internal variables {param_names}, but {len(var_keys)} were given: {var_keys}"
+                    if set(var_keys) == set(param_names):
+                        var_keys = list(param_names)
+                surface_ordered_fe[surf_fn] = var_keys
                 # get boundary inds in case we need them.
                 bndry_inds = self.boundary_inds_dict[fe_key][surf_fn]
                 bndry_cell_inds = self.fes[fe_key].cells[bndry_inds[:,0]]
@@ -661,9 +702,11 @@ class Problem(metaclass=MethodWrappingMeta):
                 int_var_surf_fe[surf_fn] = int_var_surf_fe_fn
 
             int_var_surf_temp[fe_key] = int_var_surf_fe
+            surface_ordered_temp[fe_key] = surface_ordered_fe
 
         # save new internal variables.
         self.internal_vars_surfaces = int_var_surf_temp
+        self.surface_ordered_dict = surface_ordered_temp
 
         return
     
@@ -767,15 +810,6 @@ class Problem(metaclass=MethodWrappingMeta):
         # check if dimensions are as expected *outside of* this function.
         return var_reshaped        
                 
-    # NOTE: it would be nice to define a *function* that does this
-    #       for a given variable, save this function, and then call this
-    #       function whenever we need to update the internal variables.
-    #
-    #       in time-dependent and contact problems, we migth need to call
-    #       this 100s of times, which could be somewhat expensive if we're
-    #       navigating large branches structures. Seems like a pytree
-    #       could be great for this?...
-    
     def set_dirichlet_bc_info(self, bc_info: dict[Union[list[Callable], list[int], list[Callable]]]) -> None:
         """
         Update the Dirichlet boundary condition information.
@@ -937,8 +971,18 @@ class Problem(metaclass=MethodWrappingMeta):
         else:
             ordered_dict = None
 
-        self.surface_ordered_dict = surface_ordered_dict
-        self.ordered_dict = ordered_dict
+        # surface_param_names keeps the surface_map signatures; surface_ordered_dict holds the
+        # keys actually used to look up internal_vars_surfaces, and is overwritten by
+        # set_internal_vars_surfaces so user keys don't need to match the signature names.
+        self.surface_param_names = surface_ordered_dict
+        self.surface_ordered_dict = None if surface_ordered_dict is None else \
+            {fe_key: {bndry_key: list(params) for bndry_key, params in bndry_dict.items()}
+             for fe_key, bndry_dict in surface_ordered_dict.items()}
+        # Same idea for the volume maps: param_names keeps the signatures, ordered_dict is
+        # overwritten by set_internal_vars.
+        self.param_names = ordered_dict
+        self.ordered_dict = None if ordered_dict is None else \
+            {fe_key: list(params) for fe_key, params in ordered_dict.items()}
         return
 
     @timeit
@@ -1052,11 +1096,6 @@ class Problem(metaclass=MethodWrappingMeta):
         r''' computes residual vector
 
         computes residual vector $f$ in $Au=f$ by summing the contributions of the weak form appropriately.
-        No sum occurs in the traditional FE setting, where weak form entries just get mapped to global res_vec
-        entries. In the IGA setting, dofs defined at lagrange points are summed to determine their contribution
-        to a given dof in IGA space, $$u^{\text{iga}}_j = \sum_{i=0}^N u^{\text{fe}}_{ij}$$ where the first index $i$
-        represents the $i^{\text{th}}$ dof in IGA space, while the second index $j$ represents a mask that identifies
-        the FE dof that contribute to the $i^{\text{th}}$ IGA dof. This mask is defined by :py:obj:`jax\_fem.splines.BSpline.support_list`.
 
         Parameters
         ----------
@@ -1317,3 +1356,9 @@ class Problem(metaclass=MethodWrappingMeta):
 
         # node_inds_list is a list, we just want the array.
         return node_inds_list[0]
+
+    def evaluate_J(self, F):
+        return np.linalg.det(F)
+
+    def evaluate_exp(self, x):
+        return np.exp(x)

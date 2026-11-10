@@ -82,7 +82,7 @@ class Test(unittest.TestCase):
         u_init = np.zeros_like(mesh.points)
         u_init = u_init.at[:, 2].set(0.35 * mesh.points[:, 0])
         
-        fe = FiniteElement(mesh, vec=3, dim=3, ele_type="hexahedron", gauss_order=1)
+        fe = FiniteElement(mesh, vec=3, dim=3, ele_type="hexahedron", quadrature_order=1)
         problem = HyperElasticity({"u": fe}, dirichlet_bc_info=dirichlet_bc_info)
         solver = Newton_Solver(problem, initial_guess=u_init, line_search_flag=True)
         sol, info = solver.solve()

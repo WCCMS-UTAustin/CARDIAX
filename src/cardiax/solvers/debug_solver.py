@@ -5,6 +5,7 @@ from jaxtyping import ArrayLike
 from typing import Union
 
 from cardiax._solver import Solver_Base
+from cardiax.operators import eliminate_matrix_data
 import numpy as onp
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import svds
@@ -79,8 +80,10 @@ class Debug_Solver(Solver_Base):
     def create_linear_system(self, u):
         res_vec, V = self.newton_update_helper(u, self.problem.internal_vars, self.problem.internal_vars_surfaces)
         A_fn = self.A
-        A_fn.matrix.data = V
-        A_fn.matrix.indices = np.vstack([self.I, self.J]).T
+        # self.A stores the Dirichlet-eliminated matrix; reduce the raw data/
+        # pattern with the same static masks the solver uses per solve.
+        A_fn.matrix.data = eliminate_matrix_data(V, self.elim_keep, self.elim_red_diag)
+        A_fn.matrix.indices = np.vstack([self.I_red, self.J_red]).T
         return A_fn, res_vec
 
     def create_precond_system(self, u):

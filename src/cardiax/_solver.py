@@ -11,7 +11,12 @@ from cardiax.common import timeit
 from jaxtyping import ArrayLike
 
 # lineax imports
-from cardiax.operators import SparseMatrixLinearOperator
+from cardiax.operators import (
+    SparseMatrixLinearOperator,
+    compute_elimination_masks,
+    eliminate_matrix_data,
+    assert_dirichlet_diagonals_present,
+)
 import lineax as lx
 
 # preconditioners
@@ -21,6 +26,42 @@ from cardiax.preconditioners._preconditioners import (
 
 # logging / debugging
 from cardiax import logger
+
+
+#: Number of damping fractions in the default line-search grid.
+DEFAULT_LINE_SEARCH_STEPS = 20
+
+
+def geometric_line_search_steps(num_steps: int = DEFAULT_LINE_SEARCH_STEPS,
+                                ratio: float = 0.5) -> jax.Array:
+    """Build a geometric grid of line-search damping fractions.
+
+    Returns ``[ratio**(num_steps-1), ..., ratio**2, ratio, 1]``: finest near 0
+    and coarsest at the full step. This is the default the solver uses, and it
+    is exported so that callers who want the same shape of grid at a different
+    resolution can ask for one instead of writing the expression out.
+
+    A uniformly spaced grid is a poor default here. With 20 uniform points the
+    smallest fraction is 0.05, and when the Jacobian is near-singular the Newton
+    increment is large enough that even 0.05 of it inverts elements: the whole
+    line evaluates to NaN, and the ``nanargmin`` fallback then takes the full
+    step, which is the worst available choice. Geometric spacing reaches
+    ``ratio**(num_steps-1)`` with the same number of residual evaluations and
+    resolves the tiny feasible step instead.
+
+    Args:
+        num_steps (int): number of damping fractions to sample; must be >= 1.
+        ratio (float): common ratio between consecutive fractions, in (0, 1).
+
+    Returns:
+        np.array: the damping fractions, ascending, ending at 1.
+    """
+    if num_steps < 1:
+        raise ValueError(f"num_steps must be >= 1, got {num_steps}.")
+    if not 0.0 < ratio < 1.0:
+        raise ValueError(f"ratio must lie in (0, 1), got {ratio}.")
+    return ratio ** np.arange(num_steps - 1, -1, -1, dtype=np.float64)
+
 
 @dataclass
 class Solver_Base(ABC):
@@ -35,14 +76,19 @@ class Solver_Base(ABC):
         initial_guess (np.array): the initial guess for the solver
         precond (bool): whether to use a preconditioner in the solver
         line_search_flag (bool): whether to use a line search in the solver
+        line_search_steps (array-like): the damping fractions the line search
+            samples, as any 1-D array-like. Defaults to the geometric grid from
+            :func:`geometric_line_search_steps`. Only consulted when
+            ``line_search_flag`` is set.
         use_petsc (bool): whether to use the PETSc solver (remove?)
         petsc_options (list): options for the PETSc solver (remove?)
     """
 
     problem: Problem
-    initial_guess: np.array 
+    initial_guess: np.array
     precond: str = field(default='none')
     line_search_flag: bool = field(default=True)
+    line_search_steps: ArrayLike = field(default=None)
     use_petsc: bool = field(default=False)
     petsc_options: list = field(default_factory=list) #Not sure what should be here
     
@@ -65,14 +111,52 @@ class Solver_Base(ABC):
 
         # TODO: update the dtype for this structure.
         temp_BCOO = temp_BCOO.astype(np.float64)
-        self.A = SparseMatrixLinearOperator(temp_BCOO, self.problem.bc_inds)
+
+        # Static masks that reduce the raw (deduplicated) sparsity pattern
+        # (self.I, self.J) to the symmetrically Dirichlet-eliminated pattern:
+        # the free-free block, plus the Dirichlet diagonal entries (reused as
+        # identity rows). These depend only on the fixed pattern and the fixed
+        # set of Dirichlet dofs, so they are computed once here and reused for
+        # every per-solve matrix write (forward and adjoint alike, since the
+        # masks are symmetric under swapping I and J).
+        assert_dirichlet_diagonals_present(
+            self.I, self.J, self.problem.bc_inds, self.problem.num_total_dofs_all_vars)
+        self.elim_keep, self.elim_red_diag, self.I_red, self.J_red = compute_elimination_masks(
+            self.I, self.J, self.problem.bc_inds, self.problem.num_total_dofs_all_vars)
+
+        temp_BCOO_elim = js.BCOO((eliminate_matrix_data(temp_BCOO.data, self.elim_keep, self.elim_red_diag),
+                                  np.vstack([self.I_red, self.J_red]).T),
+                                 shape=(self.problem.num_total_dofs_all_vars,
+                                        self.problem.num_total_dofs_all_vars)).sort_indices()
+        # Tag the operator positive-semidefinite so symmetric Krylov methods
+        # (CG/MINRES) may be used on it. The tag is a hint only - GMRES/BiCGStab
+        # ignore it - so this does not change the behavior of solvers that do
+        # not exploit symmetry.
+        self.A = SparseMatrixLinearOperator(
+            temp_BCOO_elim, self.problem.bc_inds, tags=lx.positive_semidefinite_tag)
 
         self.reduceV = jax.jit(self.reduceV)
+
+        # Materialize the line-search grid once. Storing it as an array (rather
+        # than rebuilding it per Newton step) keeps it a compile-time constant
+        # of the vmapped residual evaluation, so a caller-supplied grid costs no
+        # more than the default one.
+        self.line_search_steps = self._validate_line_search_steps(
+            self.line_search_steps)
 
         # self.line_search = jax.jit(self.line_search)
 
         self.solver = lx.BiCGStab(rtol=1e-10, atol=1e-10, max_steps=100000)
-        self.jax_solve = timeit(jax.jit(self.jax_solve))
+        # Optional dedicated solver for the adjoint linear solve. None means
+        # the adjoint reuses self.solver, which is the historical behavior.
+        self.adjoint_solver = None
+        # One compiled solve per distinct solver object, built on first use.
+        # The solver has to be baked in at trace time, so a single compiled
+        # solve cannot serve two different solvers; keying the cache on the
+        # solver instead of compiling once in the constructor is what lets the
+        # forward and adjoint solvers differ, and lets either be swapped after
+        # construction (which callers routinely do) without a stale compile.
+        self._compiled_solves = []
 
         # define the preconditioning method of choice
         # for now, we have true/false options, but this can be expanded upon
@@ -244,25 +328,147 @@ class Solver_Base(ABC):
         res_vec = self.apply_bc_vec(res_vec, dofs + alpha*inc)
         return np.linalg.norm(res_vec)
 
-    def line_search(self, dofs: ArrayLike, inc: ArrayLike) -> jax.Array:
+    @staticmethod
+    def _validate_line_search_steps(steps: ArrayLike) -> jax.Array:
+        """Normalize the ``line_search_steps`` argument into a 1-D array.
 
-        steps = np.linspace(0, 1, 21)[1:]
-        steps = steps
+        Args:
+            steps (array-like): the damping fractions to sample, or ``None`` to
+                take the default geometric grid.
+
+        Returns:
+            np.array: the damping fractions as a float array.
+
+        Raises:
+            ValueError: if ``steps`` is not a non-empty 1-D array-like.
+        """
+        if steps is None:
+            return geometric_line_search_steps()
+        steps = np.asarray(steps, dtype=np.float64)
+        if steps.ndim != 1 or steps.size == 0:
+            raise ValueError(
+                "line_search_steps must be a non-empty 1-D array of damping "
+                f"fractions; got shape {steps.shape}.")
+        return steps
+
+    def line_search(self, dofs: ArrayLike, inc: ArrayLike) -> jax.Array:
+        """Damp the Newton increment by the sampled step that minimizes the
+        residual norm.
+
+        Every damping fraction in ``self.line_search_steps`` is evaluated (in
+        parallel, via ``vmap``) and the one giving the smallest residual norm is
+        taken. See :func:`geometric_line_search_steps` for the default grid and
+        the ``line_search_steps`` constructor argument for supplying your own.
+
+        Args:
+            dofs (np.array): current DOF array
+            inc (np.array): the Newton increment to damp
+
+        Returns:
+            np.array: ``dofs`` advanced by the best sampled fraction of ``inc``
+        """
+        steps = self.line_search_steps
         vres = jax.vmap(self.res_norm_part, in_axes=(None, None, 0))
         res_vals = vres(dofs, inc, steps)
-        min_ind = np.argmin(res_vals)
+        min_ind = np.nanargmin(res_vals)
+        # nanargmin returns [-1] if all the values are NaN, which in
+        # this case is the desired behavior as it will use the full step
+        # and surface the NaN that couldn't be resolved by the line
+        # search
 
         return dofs + steps[min_ind] * inc
 
-    def jax_solve(self, mat_data: ArrayLike, row_inds: ArrayLike, 
-                  col_inds: ArrayLike, b: ArrayLike, 
+    def set_adjoint_solver(self, solver) -> None:
+        """Choose the linear solver used for the adjoint solve.
+
+        The forward and adjoint linear systems are solved with the same
+        operator but are not equally hard: the forward solve runs at states
+        far from equilibrium, where the tangent may be poorly conditioned or
+        indefinite, while the adjoint is evaluated at the converged state.
+        A method that is robust enough for the forward iterates is often
+        needlessly slow for the adjoint, and vice versa, so the two are
+        allowed to differ.
+
+        Args:
+            solver: a lineax solver instance to use for the adjoint solve, or
+                ``None`` to go back to reusing the forward solver
+                (``self.solver``), which is the default.
+        """
+        self.adjoint_solver = solver
+
+    def _compiled_solve_for(self, solver):
+        """Return the compiled linear solve bound to ``solver``.
+
+        The solver is baked in when the solve is traced, so one compiled solve
+        cannot serve two solvers. Rather than compile once in the constructor,
+        which would freeze whichever solver happened to be installed then,
+        each distinct solver gets its own compiled solve on first use. The list
+        holds at most one entry per solver in play (the forward one and, if
+        configured, the adjoint one), and identity comparison is used so that
+        reinstalling the same solver object reuses its compiled solve.
+        """
+        for known, compiled in self._compiled_solves:
+            if known is solver:
+                return compiled
+        compiled = timeit(jax.jit(
+            fctls.partial(self._linear_solve_with_operator, solver)))
+        self._compiled_solves.append((solver, compiled))
+        return compiled
+
+    def _linear_solve_with_operator(self, solver, mat_data: ArrayLike,
+                                    row_inds: ArrayLike, col_inds: ArrayLike,
+                                    b: ArrayLike, x0: ArrayLike) -> tuple:
+        """Solve ``Ax = b`` with ``solver``, populating ``self.A`` from the data.
+
+        Shared body of the forward and adjoint solves; the two differ only in
+        which solver they pass and, for the adjoint, in passing the transposed
+        sparsity pattern.
+
+        ``row_inds``/``col_inds`` are the *raw* (un-eliminated) pattern, aligned
+        with ``mat_data``. They are reduced to the symmetrically Dirichlet-
+        eliminated pattern that ``self.A`` stores, using the static masks
+        precomputed in ``__post_init__``; those masks are symmetric under
+        swapping rows and columns, so they reduce the adjoint's transposed
+        pattern just as well as the forward one.
+
+        Args:
+            solver: the lineax solver to run.
+            mat_data (np.array): data array for the BCOO
+            row_inds (np.array): row indices used for the action of A
+            col_inds (np.array): column indices used for the action of A
+            b (np.array): right hand side of the linear system
+            x0 (np.array): initial guess for the solver
+
+        Returns:
+            x (np.array): solution to the linear system
+            err (float): the residual norm of the solution
+        """
+        A_fn = self.A
+        A_fn.matrix.data = eliminate_matrix_data(mat_data, self.elim_keep,
+                                                 self.elim_red_diag)
+        A_fn.matrix.indices = np.vstack([row_inds[self.elim_keep],
+                                         col_inds[self.elim_keep]]).T
+        pc = self.get_preconditioner(A_fn.matrix)
+        solution = lx.linear_solve(A_fn, b, solver,
+                            options={"y0": x0, "preconditioner": pc}, throw=False)
+
+        x = solution.value
+
+        # likely want to avoid re-sizing from within the solver,
+        # but err is not correct otherwise
+
+        # Verify convergence
+        err = np.linalg.norm(A_fn.mv(x) - b)
+
+        return x, err
+
+    def jax_solve(self, mat_data: ArrayLike, row_inds: ArrayLike,
+                  col_inds: ArrayLike, b: ArrayLike,
                   x0: ArrayLike) -> tuple:
-        """Solves the linear system Ax=b using the
+        """Solves the forward linear system Ax=b using the
         lineax solver with the defined method. This defaults
-        to the BiCGstab solver, but can be changed with the 
+        to the BiCGstab solver, but can be changed with the
         solver.solver object.
-        #NOTE: The indices are given as input, so if using the adjoint
-        method to compute gradients, we swap I with J when calling jax_solve
 
         Args:
             V (np.array): data matrix for the BCOO
@@ -278,22 +484,63 @@ class Solver_Base(ABC):
             x (np.array): solution to the linear system
             err (float): the error of the solution
         """
-        A_fn = self.A
-        A_fn.matrix.data = mat_data
-        A_fn.matrix.indices = np.vstack([row_inds, col_inds]).T
-        pc = self.get_preconditioner(A_fn.matrix)
-        solution = lx.linear_solve(A_fn, b, self.solver, 
-                            options={"y0": x0, "preconditioner": pc}, throw=False)
-        
-        x = solution.value
+        return self._compiled_solve_for(self.solver)(mat_data, row_inds,
+                                                     col_inds, b, x0)
 
-        # likely want to avoid re-sizing from within the solver,
-        # but err is not correct otherwise
+    def _raw_matvec(self, mat_data: ArrayLike, row_inds: ArrayLike,
+                    col_inds: ArrayLike, x: ArrayLike) -> jax.Array:
+        """Matrix-vector product with the raw (BC-free) tangent.
 
-        # Verify convergence
-        err = np.linalg.norm(A_fn.mv(x) - b)
+        Multiplies by the assembled tangent with **no** Dirichlet elimination on
+        either the rows or the columns. Used to move the Dirichlet-column lift
+        onto the right-hand side: applying the raw tangent to the fixed Dirichlet
+        increment recovers exactly the column contribution that symmetric
+        elimination discards from the stored operator.
 
-        return x, err
+        Args:
+            mat_data (np.array): data matrix for the BCOO
+            row_inds (np.array): row indices used for action of the tangent
+            col_inds (np.array): column indices used for action of the tangent
+            x (np.array): vector to multiply
+
+        Returns:
+            np.array: the raw (unconstrained) matrix-vector product
+        """
+        n = self.problem.num_total_dofs_all_vars
+        raw = js.BCOO((mat_data, np.vstack([row_inds, col_inds]).T), shape=(n, n))
+        return js.sparsify(lambda m, v: m @ v)(raw, x)
+
+    def adjoint_solve(self, mat_data: ArrayLike, row_inds: ArrayLike,
+                      col_inds: ArrayLike, b: ArrayLike,
+                      x0: ArrayLike) -> tuple:
+        """Solve the adjoint linear system, using the adjoint solver if set.
+
+        Falls back to ``self.solver`` when no dedicated adjoint solver has
+        been configured, so the default behavior is identical to solving the
+        adjoint through :meth:`jax_solve`. See :meth:`set_adjoint_solver`.
+
+        #NOTE: The indices are given as input, and the adjoint system is the
+        transpose of the forward one, so callers pass the row and column
+        indices swapped relative to :meth:`jax_solve`. Since the stored
+        operator's Dirichlet elimination is symmetric, the operator is its own
+        transpose, and populating it with the transposed pattern realizes
+        exactly the transpose of the forward constrained tangent.
+
+        Args:
+            mat_data (np.array): data matrix for the BCOO
+            row_inds (np.array): Row indices used for action of A
+            col_inds (np.array): Column indices used for action of A
+            b (np.array): right hand side of the linear system
+            x0 (np.array): initial guess for the solver
+
+        Returns:
+            x (np.array): solution to the adjoint linear system
+            err (float): the error of the solution
+        """
+        solver = self.adjoint_solver if self.adjoint_solver is not None \
+            else self.solver
+        return self._compiled_solve_for(solver)(mat_data, row_inds,
+                                                col_inds, b, x0)
 
     def row_elimination(self, fn: Callable) -> Callable:
         """Add documentation
@@ -345,6 +592,18 @@ class Solver_Base(ABC):
         x0_1 = self.assign_bc(np.zeros_like(b))
         x0_2 = self.copy_bc(dofs)
         x0 = x0_1 - x0_2
+
+        # Symmetric elimination drops the Dirichlet columns of the stored
+        # tangent, so the inhomogeneous Dirichlet lift no longer enters the
+        # interior equations implicitly through those columns. Move it
+        # explicitly onto the right-hand side: subtract the raw (BC-free)
+        # tangent applied to the fixed Dirichlet increment x0, then restore the
+        # target increment on the Dirichlet rows (which the eliminated operator
+        # treats as the identity).
+        dirichlet_dofs, _ = self.problem.get_boundary_data()
+        b = b - self._raw_matvec(V, self.I, self.J, x0)
+        b = b.at[dirichlet_dofs].set(x0[dirichlet_dofs])
+
         inc, err = self.jax_solve(V, self.I, self.J, b, x0)
 
         # FOR TESTING PURPOSES ONLY:
@@ -431,7 +690,15 @@ class Solver_Base(ABC):
         res, V = self.problem.newton_update_helper(sol, self.problem.internal_vars, self.problem.internal_vars_surfaces)
         V = self.reduceV(V)
 
-        adjoint_vec, _ = self.jax_solve(V, self.J, self.I, v, np.zeros_like(v))
+        adjoint_vec, adj_res = self.adjoint_solve(V, self.J, self.I, v,
+                                                  np.zeros_like(v))
+        # Expose the adjoint linear-solve residual so callers can judge the
+        # quality of the reduced gradient: a poorly converged adjoint solve
+        # yields a wrong gradient, and unlike a poorly converged forward solve
+        # there is no residual downstream that would reveal it. Stored as the
+        # raw device scalar; the caller converts it at log time, so no extra
+        # synchronization is forced here.
+        self._last_adjoint_res = adj_res
 
         vjp_linear_fn = get_vjp_contraint_fn_params(params, sol)
         # Not sure what the reshape was for

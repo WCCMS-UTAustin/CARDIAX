@@ -40,10 +40,8 @@ class Newton_Solver(Solver_Base):
         V = self.reduceV(V)
         return res_vec, V
 
-    # initial pass of reduced system testing: force user to
-    # manually indicate if there are closed knots in a certain direction
     def solve(self, atol: float=1e-6, max_iter: int=30):
-        """The solver imposes Dirichlet B.C. with "row elimination" method.
+        """The solver imposes Dirichlet B.C. with symmetric elimination.
 
         Some memo:
 
@@ -56,12 +54,18 @@ class Newton_Solver(Solver_Base):
             [0 1 0 0]
             [0 0 1 0]
             [0 0 0 1]
-        A_fn = d(res)/d(u) = D*dr/du + (I - D)
+        A_fn = D*(dr/du)*D + (I - D)
+
+        Both the Dirichlet rows and the Dirichlet columns of dr/du are
+        eliminated, so A_fn is symmetric whenever dr/du is. The eliminated
+        columns are applied to the fixed Dirichlet increment and moved onto the
+        right-hand side as a boundary-load lift; see
+        Solver_Base.linear_incremental_solver.
 
         The function newton_update computes r(u) and dr/du
         """
         logger.debug(
-            "Calling the row elimination solver for imposing Dirichlet B.C.")
+            "Calling the symmetric elimination solver for imposing Dirichlet B.C.")
         logger.debug("Start timing")
         start = time.time()
 
