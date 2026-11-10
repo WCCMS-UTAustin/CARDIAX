@@ -1,0 +1,70 @@
+
+### What do we want to control from the input file? ###
+
+# Path to input file, mesh, and potentially other things...
+
+directory: "."
+
+### FE object ###
+
+# Mesh, quadrature, dim
+# Default box_mesh: unit cube with 10 elements per side
+fe_config:
+  var: "u"
+  mesh_path:
+
+  generate_mesh:
+    name: "box_mesh"
+    kwargs:
+
+  kwargs:
+    ele_type: "hexahedron"
+    quadrature_order: 1
+    vec: 3
+    dim: 3
+
+### Problem object ###
+# PDE to solve (mainly Hyperelasticity)
+# Material model to use (allow adjusting constants)
+# Boundary conditions to apply
+# Faces to apply boundary conditions to (tagged mesh)
+pde_config:
+
+  pde_info:
+    pde_class: "Isotropic"
+    pde_type: "NeoHookean" # Defines the get_tensor_map
+    constants:
+      E: 10.
+      nu: 0.3
+
+  # Compression test: top and bottom faces displaced 0.1 inward
+  dirichlet_bc_info:
+    u:
+      bc1:
+        type: "Dirichlet"
+        component: [0, 1, 2]
+        value: [0.0, 0.0, 0.1]
+        surface_tag: "bottom"
+        static: True
+      bc2:
+        type: "Dirichlet"
+        component: [0, 1, 2]
+        value: [0.0, 0.0, -0.1]
+        surface_tag: "top"
+        static: True
+
+  # Traction-free side face (the input file loader expects at least one surface map)
+  surface_maps_info:
+    u:
+      bc3:
+        type: "Neumann"
+        value: [0.0, 0.0, 0.0]
+        surface_tag: "right"
+        static: True
+
+### Solver object ###
+solver_config:
+  name: "Newton"
+  kwargs:
+    max_iter: 20
+    atol: 1.0e-6
