@@ -52,7 +52,7 @@ class Test(unittest.TestCase):
 
         dirichlet_bc_info = {"u": [bc_left, bc_right, bc_top, bc_bottom]}
 
-        fe = FiniteElement(mesh, vec=1, dim=2, ele_type="quad8", gauss_order=2)
+        fe = FiniteElement(mesh, vec=1, dim=2, ele_type="quad8", quadrature_order=2)
         problem = LinearPoisson({"u": fe}, dirichlet_bc_info=dirichlet_bc_info)
         solver = Newton_Solver(problem, np.zeros(problem.num_total_dofs_all_vars))
     

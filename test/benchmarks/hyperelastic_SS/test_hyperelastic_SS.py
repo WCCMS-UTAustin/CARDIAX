@@ -47,7 +47,7 @@ class Test(unittest.TestCase):
         Lx, Ly, Lz = 1., 1., 1.
         ele_type = 'hexahedron'
         mesh = box_mesh(Nx=15, Ny=15, Nz=15, Lx=Lx, Ly=Ly, Lz=Lz)
-        fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = ele_type, gauss_order = 1)
+        fe = FiniteElement(mesh, vec = 3, dim = 3, ele_type = ele_type, quadrature_order = 1)
 
         def left(point):
             return np.isclose(point[0], 0., atol=1e-5)
